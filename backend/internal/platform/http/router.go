@@ -11,7 +11,7 @@ import (
 	platformmiddleware "immera/internal/platform/middleware"
 )
 
-func NewRouter(log *slog.Logger, allowedOrigins []string, registerRoutes func(chi.Router)) stdhttp.Handler {
+func NewRouter(log *slog.Logger, allowedOrigins []string, registerRoutes ...func(chi.Router)) stdhttp.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
@@ -25,6 +25,8 @@ func NewRouter(log *slog.Logger, allowedOrigins []string, registerRoutes func(ch
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
-	registerRoutes(router)
+	for _, registerRoute := range registerRoutes {
+		registerRoute(router)
+	}
 	return router
 }
