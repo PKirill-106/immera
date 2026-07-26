@@ -38,10 +38,10 @@ func Load() (Config, error) {
 		Environment: env("APP_ENV", "development"),
 		HTTP: HTTP{
 			Address:        env("HTTP_ADDRESS", ":8080"),
-			AllowedOrigins: splitCSV(env("HTTP_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8081")),
+			AllowedOrigins: splitCSV(env("HTTP_ALLOWED_ORIGINS", "http://localhost:3000")),
 		},
 		Database: Database{
-			URL: env("DATABASE_URL", "postgres://immera:immera@localhost:5432/immera?sslmode=disable"),
+			URL: env("DATABASE_URL", ""),
 		},
 	}
 

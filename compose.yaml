@@ -5,8 +5,8 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       HTTP_ADDRESS: :8080
-      HTTP_ALLOWED_ORIGINS: ${HTTP_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8081}
-      DATABASE_URL: postgres://${POSTGRES_USER:-immera}:${POSTGRES_PASSWORD:-immera}@postgres:5432/${POSTGRES_DB:-immera}?sslmode=disable
+      HTTP_ALLOWED_ORIGINS: ${HTTP_ALLOWED_ORIGINS:-http://localhost:3000}
+      DATABASE_URL:  ${DATABASE_URL}
       DB_CONNECT_TIMEOUT: ${DB_CONNECT_TIMEOUT:-5s}
       DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-20}
       DB_MIN_CONNECTIONS: ${DB_MIN_CONNECTIONS:-2}
@@ -21,11 +21,14 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-immera}
-      POSTGRES_USER: ${POSTGRES_USER:-immera}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-immera}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      DATABASE_URL: ${DATABASE_URL}
     ports:
       - "5432:5432"
     volumes:
