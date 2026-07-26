@@ -1,13 +1,21 @@
+COMPOSE = docker compose --env-file backend/.env
 .PHONY: run docker-up docker-down fmt test vet check
 
-run:
+go-run:
 	cd backend && go run ./cmd/api
 
+run:
+	$(COMPOSE) up -d postgres 
+	make go-run
+
 docker-up:
-	docker compose up --build
+	$(COMPOSE) up --build
 
 docker-down:
-	docker compose down
+	$(COMPOSE) down
+
+docker-down-v:
+	$(COMPOSE) down -v
 
 fmt:
 	cd backend && gofmt -w $$(find . -name '*.go' -type f)
