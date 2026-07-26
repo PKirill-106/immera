@@ -2,4 +2,29 @@
 
 📚 Read foreign-language books without breaking your reading flow.
 
-Immera is a production-oriented Full Stack application built with Go, React Native, PostgreSQL, and Redis. It enables users to read EPUB, PDF, and FB2 documents, translate words in context, save them to a personal dictionary, and take notes—all within a seamless reading experience.
+Immera is a modular-monolith Go backend for an e-reading and vocabulary-building application. PostgreSQL is its primary datastore.
+
+## Development
+
+Copy `.env.example` to `.env`, then run the complete stack:
+
+```sh
+make docker-up
+```
+
+For local API development, start PostgreSQL and run the API separately:
+
+```sh
+docker compose up -d postgres
+make run
+```
+
+Useful checks:
+
+```sh
+make fmt
+make test
+make vet
+```
+
+The API exposes `GET /health/live` for liveness and `GET /health/ready` for PostgreSQL-backed readiness.
