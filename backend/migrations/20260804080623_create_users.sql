@@ -1,0 +1,24 @@
+-- +goose Up
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(30) NOT NULL,
+    email VARCHAR(50) NOT NULL UNIQUE,
+    phone_number VARCHAR(15) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_settings (
+    id SERIAL PRIMARY KEY,
+    default_language VARCHAR(10) NOT NULL DEFAULT 'en',
+    theme VARCHAR(10) NOT NULL DEFAULT 'light',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- +goose Down
+DROP TABLE IF EXISTS users;
+
+DROP TABLE IF EXISTS user_settings;
