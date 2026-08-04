@@ -22,6 +22,7 @@ profile.cov
 
 # Project-local development tools
 /bin/
+*/bin/
 
 # Go workspace file
 go.work
