@@ -2,8 +2,8 @@ package user
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"immera/internal/platform/httpx"
 	"log/slog"
 	"net/http"
 
@@ -35,7 +35,18 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "userID"))
 
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		if writeErr := httpx.WriteError(
+			w,
+			http.StatusBadRequest,
+			"INVALID_USER_ID",
+			"invalid user id",
+		); writeErr != nil {
+			h.log.Error(
+				"failed to write error response",
+				"error", writeErr,
+			)
+		}
+
 		return
 	}
 
@@ -44,7 +55,19 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrNotFound):
-			http.Error(w, "user not found", http.StatusNotFound)
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusNotFound,
+				"USER_NOT_FOUND",
+				"user not found",
+			); writeErr != nil {
+				h.log.Error(
+					"failed to write error response",
+					"user_id", id.String(),
+					"error", writeErr,
+				)
+			}
+
 		default:
 			h.log.Error(
 				"failed to get user",
@@ -52,8 +75,20 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 				"error", err,
 			)
 
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"INTERNAL_ERROR",
+				"internal server error",
+			); writeErr != nil {
+				h.log.Error(
+					"failed to write error response",
+					"user_id", id.String(),
+					"error", writeErr,
+				)
+			}
 		}
+
 		return
 	}
 
@@ -61,9 +96,9 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	response := touserByIDResponse(foundUser)
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := httpx.WriteJSON(w, http.StatusOK, response); err != nil {
 		h.log.Error(
-			"failed to encode user response",
+			"failed to write user response",
 			"user_id", id.String(),
 			"error", err,
 		)
