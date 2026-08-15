@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"immera/internal/health"
+	"immera/internal/platform/apidocs"
 	"immera/internal/platform/config"
 	"immera/internal/platform/database"
 	httpserver "immera/internal/platform/http"
@@ -45,12 +46,18 @@ func run() error {
 
 	healthHandler := health.NewHandler(pool.Ping)
 
+	docsHandler := apidocs.NewHandler(
+		"/openapi.yaml",
+		"../docs/openapi.yaml",
+	)
+
 	userRepository := user.NewPostgresRepository(pool)
 	userService := user.NewService(userRepository)
 	userHandler := user.NewHandler(userService, log)
 
 	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, []httpserver.RouteRegistrar{
 		healthHandler.Routes,
+		docsHandler.Routes,
 	},
 		[]httpserver.RouteRegistrar{
 			userHandler.Routes,
