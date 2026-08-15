@@ -49,7 +49,12 @@ func run() error {
 	userService := user.NewService(userRepository)
 	userHandler := user.NewHandler(userService, log)
 
-	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, healthHandler.Routes, userHandler.Routes)
+	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, []httpserver.RouteRegistrar{
+		healthHandler.Routes,
+	},
+		[]httpserver.RouteRegistrar{
+			userHandler.Routes,
+		})
 	server := httpserver.NewServer(cfg.HTTP, router, log)
 
 	serverErrors := make(chan error, 1)
