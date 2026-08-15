@@ -15,8 +15,7 @@ import (
 	"immera/internal/platform/database"
 	httpserver "immera/internal/platform/http"
 	"immera/internal/platform/logger"
-
-	"github.com/joho/godotenv"
+	"immera/internal/user"
 )
 
 func main() {
@@ -27,9 +26,6 @@ func main() {
 }
 
 func run() error {
-	if err := godotenv.Load(); err != nil {
-		fmt.Printf("Failed to load .env")
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
@@ -48,7 +44,12 @@ func run() error {
 	defer pool.Close()
 
 	healthHandler := health.NewHandler(pool.Ping)
-	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, healthHandler.Routes)
+
+	userRepository := user.NewPostgresRepository(pool)
+	userService := user.NewService(userRepository)
+	userHandler := user.NewHandler(userService, log)
+
+	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, healthHandler.Routes, userHandler.Routes)
 	server := httpserver.NewServer(cfg.HTTP, router, log)
 
 	serverErrors := make(chan error, 1)
