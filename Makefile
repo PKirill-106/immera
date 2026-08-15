@@ -19,8 +19,11 @@ export DATABASE_URL
 go-run:
 	cd backend && go run ./cmd/api
 
-run:
+pg-run:
 	$(COMPOSE) up -d postgres 
+
+run:
+	make pg-run
 	make go-run
 
 docker-up:
