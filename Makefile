@@ -10,6 +10,8 @@ ifeq ($(origin DATABASE_URL), undefined)
 -include $(ENV_FILE)
 endif
 
+export DATABASE_URL
+
 .PHONY: go-run run docker-up docker-down docker-down-v fmt test vet check \
 	migrate-install migrate-create migrate-validate migrate-status \
 	migrate-version migrate-up migrate-down check-database-url
