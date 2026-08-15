@@ -94,7 +94,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	response := touserByIDResponse(foundUser)
+	response := toUserByIDResponse(foundUser)
 
 	if err := httpx.WriteJSON(w, http.StatusOK, response); err != nil {
 		h.log.Error(

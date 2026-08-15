@@ -1,6 +1,6 @@
 package user
 
-func touserByIDResponse(user User) userByIDResponse {
+func toUserByIDResponse(user User) userByIDResponse {
 	return userByIDResponse{
 		ID:          user.ID,
 		Name:        user.Name,
