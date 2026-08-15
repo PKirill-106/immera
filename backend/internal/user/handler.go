@@ -54,6 +54,20 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrInvalidID):
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusBadRequest,
+				"INVALID_USER_ID",
+				"invalid user id",
+			); writeErr != nil {
+				h.log.Error(
+					"failed to write error response",
+					"user_id", id.String(),
+					"error", writeErr,
+				)
+			}
+
 		case errors.Is(err, ErrNotFound):
 			if writeErr := httpx.WriteError(
 				w,
