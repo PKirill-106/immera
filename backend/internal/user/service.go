@@ -22,7 +22,7 @@ func (s *Service) GetByID(
 	id uuid.UUID,
 ) (User, error) {
 	if id == uuid.Nil {
-		return User{}, ErrInvalidID
+		return User{}, ErrInvalidUserID
 	}
 
 	foundUser, err := s.repo.GetByID(ctx, id)
@@ -31,4 +31,17 @@ func (s *Service) GetByID(
 	}
 
 	return foundUser, nil
+}
+
+func (s *Service) GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error) {
+	if id == uuid.Nil {
+		return UserSettings{}, ErrInvalidUserID
+	}
+
+	foundSettings, err := s.repo.GetUserSettings(ctx, id)
+	if err != nil {
+		return UserSettings{}, fmt.Errorf("get user settings: %w", err)
+	}
+
+	return foundSettings, nil
 }

@@ -12,6 +12,7 @@ import (
 
 type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
 }
 
 type PostgresRepository struct {
@@ -55,11 +56,63 @@ func (r *PostgresRepository) GetByID(
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return User{}, ErrNotFound
+			return User{}, ErrUserNotFound
 		}
 
 		return User{}, fmt.Errorf("get user by id: %w", err)
 	}
 
 	return user, nil
+}
+
+func (r *PostgresRepository) GetUserSettings(
+	ctx context.Context,
+	id uuid.UUID,
+) (UserSettings, error) {
+	var (
+		userID          uuid.UUID
+		settingsID      *uuid.UUID
+		defaultLanguage *string
+		theme           *string
+	)
+
+	err := r.pool.QueryRow(
+		ctx,
+		`
+		SELECT
+    		u.id,
+				us.id,
+				us.default_language,
+				us.theme
+		FROM users u
+		LEFT JOIN user_settings us ON us.user_id = u.id
+		WHERE u.id = $1;
+		`,
+		id,
+	).Scan(
+		&userID,
+		&settingsID,
+		&defaultLanguage,
+		&theme,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return UserSettings{}, ErrUserNotFound
+		}
+
+		return UserSettings{}, fmt.Errorf("get user settings by id: %w", err)
+	}
+
+	if settingsID == nil || defaultLanguage == nil || theme == nil {
+		return UserSettings{}, fmt.Errorf("user settings invariant violated for user %s", userID)
+	}
+
+	userSettings := UserSettings{
+		ID:              *settingsID,
+		DefaultLanguage: *defaultLanguage,
+		Theme:           *theme,
+	}
+
+	return userSettings, nil
 }

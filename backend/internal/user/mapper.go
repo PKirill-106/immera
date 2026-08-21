@@ -8,3 +8,10 @@ func toUserByIDResponse(user User) userByIDResponse {
 		PhoneNumber: user.PhoneNumber,
 	}
 }
+func toUserSettingsResponse(settings UserSettings) userSettingsResponse {
+	return userSettingsResponse{
+		ID:              settings.ID,
+		DefaultLanguage: settings.DefaultLanguage,
+		Theme:           settings.Theme,
+	}
+}

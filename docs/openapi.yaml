@@ -14,7 +14,6 @@ paths:
       tags:
         - User
       summary: Get user by ID
-
       parameters:
         - name: userID
           in: path
@@ -32,10 +31,33 @@ paths:
                 $ref: '#/components/schemas/User'
         '400':
           $ref: '#/components/responses/BadRequest'
-
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /users/{userID}/settings:
+    get:
+      tags:
+        - User
+      summary: Get user's settings by ID
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User's settings found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSettings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -69,15 +91,27 @@ components:
         id:
           type: string
           format: uuid
-
         name:
           type: string
-
         email:
           type: string
           format: email
-
         phone_number:
+          type: string
+
+    UserSettings:
+      type: object
+      required:
+        - id
+        - default_language
+        - theme
+      properties:
+        id:
+          type: string
+          format: uuid
+        default_language:
+          type: string
+        theme:
           type: string
 
   responses:
@@ -90,7 +124,7 @@ components:
           example:
             error:
               code: INVALID_REQUEST
-              message: invalid user id
+              message: invalid request
     Unauthorized:
       description: Authentication is required or credentials are invalid
       content:
@@ -120,7 +154,7 @@ components:
           example:
             error:
               code: NOT_FOUND
-              message: user not found
+              message: requested resource was not found
     Conflict:
       description: Request conflicts with the current state of the resource
       content:

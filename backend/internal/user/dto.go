@@ -8,3 +8,8 @@ type userByIDResponse struct {
 	Email       string    `json:"email"`
 	PhoneNumber string    `json:"phone_number"`
 }
+type userSettingsResponse struct {
+	ID              uuid.UUID `json:"id"`
+	DefaultLanguage string    `json:"default_language"`
+	Theme           string    `json:"theme"`
+}
