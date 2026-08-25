@@ -30,15 +30,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/InvalidUserID'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/UserNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
     put:
       tags:
         - User
       summary: Update user by ID
+      operationId: updateUserByID
       parameters:
         - name: userID
           in: path
@@ -56,9 +57,11 @@ paths:
         '204':
           description: User updated successfully
         '400':
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/UpdateUserBadRequest'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          $ref: '#/components/responses/UserConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
   /users/{userID}/settings:
@@ -81,9 +84,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserSettings'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/InvalidUserID'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/UserNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -142,6 +145,7 @@ components:
 
     UpdateUserRequest:
       type: object
+      additionalProperties: false
       required:
         - name
         - email
@@ -149,13 +153,91 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
+          maxLength: 30
+          example: Jane Doe
         email:
           type: string
           format: email
+          maxLength: 50
+          example: jane@example.com
         phone_number:
           type: string
+          minLength: 1
+          maxLength: 15
+          example: "+48123456789"
 
   responses:
+    InvalidUserID:
+      description: The user ID is not a valid non-zero UUID
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_USER_ID
+              message: invalid user id
+    UpdateUserBadRequest:
+      description: The user ID or request body is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidUserID:
+              summary: Invalid user ID
+              value:
+                error:
+                  code: INVALID_USER_ID
+                  message: invalid user id
+            invalidRequest:
+              summary: Malformed request body
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            invalidUserData:
+              summary: Invalid user fields
+              value:
+                error:
+                  code: INVALID_USER_DATA
+                  message: invalid user data
+    UserNotFound:
+      description: No user exists with the provided ID
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: USER_NOT_FOUND
+              message: user not found
+    UserConflict:
+      description: The email or phone number is already used by another user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            emailAlreadyExists:
+              summary: Email already exists
+              value:
+                error:
+                  code: EMAIL_ALREADY_EXISTS
+                  message: email already exists
+            phoneNumberAlreadyExists:
+              summary: Phone number already exists
+              value:
+                error:
+                  code: PHONE_NUMBER_ALREADY_EXISTS
+                  message: phone number already exists
+            userConflict:
+              summary: Another user uniqueness constraint was violated
+              value:
+                error:
+                  code: USER_CONFLICT
+                  message: user conflicts with existing data
     BadRequest:
       description: Invalid request
       content:

@@ -3,13 +3,14 @@ package user
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"immera/internal/platform/httpx"
+	"io"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"immera/internal/platform/httpx"
 )
 
 type userService interface {
@@ -40,74 +41,14 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "userID"))
 
 	if err != nil {
-		if writeErr := httpx.WriteError(
-			w,
-			http.StatusBadRequest,
-			"INVALID_USER_ID",
-			"invalid user id",
-		); writeErr != nil {
-			h.log.Error(
-				"failed to write error response",
-				"error", writeErr,
-			)
-		}
-
+		h.writeMappedError(w, ErrInvalidUserID, "invalid user ID")
 		return
 	}
 
 	foundUser, err := h.service.GetByID(r.Context(), id)
 
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrInvalidUserID):
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusBadRequest,
-				"INVALID_USER_ID",
-				"invalid user id",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-
-		case errors.Is(err, ErrUserNotFound):
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusNotFound,
-				"USER_NOT_FOUND",
-				"user not found",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-
-		default:
-			h.log.Error(
-				"failed to get user",
-				"user_id", id.String(),
-				"error", err,
-			)
-
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"INTERNAL_ERROR",
-				"internal server error",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-		}
-
+		h.writeMappedError(w, err, "failed to get user", "user_id", id.String())
 		return
 	}
 
@@ -126,73 +67,14 @@ func (h *Handler) GetUserSettings(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "userID"))
 
 	if err != nil {
-		if writeErr := httpx.WriteError(
-			w,
-			http.StatusBadRequest,
-			"INVALID_USER_ID",
-			"invalid user id",
-		); writeErr != nil {
-			h.log.Error(
-				"failed to write error response",
-				"error", writeErr,
-			)
-		}
-
+		h.writeMappedError(w, ErrInvalidUserID, "invalid user ID")
 		return
 	}
 
 	foundSettings, err := h.service.GetUserSettings(r.Context(), id)
 
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrInvalidUserID):
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusBadRequest,
-				"INVALID_USER_ID",
-				"invalid user id",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-		case errors.Is(err, ErrUserNotFound):
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusNotFound,
-				"USER_NOT_FOUND",
-				"user not found",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-
-		default:
-			h.log.Error(
-				"failed to get user settings",
-				"user_id", id.String(),
-				"error", err,
-			)
-
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"INTERNAL_ERROR",
-				"internal server error",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-		}
-
+		h.writeMappedError(w, err, "failed to get user settings", "user_id", id.String())
 		return
 	}
 
@@ -211,24 +93,21 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "userID"))
 
 	if err != nil {
-		if writeErr := httpx.WriteError(
-			w,
-			http.StatusBadRequest,
-			"INVALID_USER_ID",
-			"invalid user id",
-		); writeErr != nil {
-			h.log.Error(
-				"failed to write error response",
-				"error", writeErr,
-			)
-		}
-
+		h.writeMappedError(w, ErrInvalidUserID, "invalid user ID")
 		return
 	}
 
 	var req updateUserRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update user request", "user_id", id.String())
+		return
+	}
+
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update user request", "user_id", id.String())
 		return
 	}
 
@@ -242,56 +121,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrInvalidUserID):
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusBadRequest,
-				"INVALID_USER_ID",
-				"invalid user id",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-
-		case errors.Is(err, ErrUserNotFound):
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusNotFound,
-				"USER_NOT_FOUND",
-				"user not found",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-
-		default:
-			h.log.Error(
-				"failed to update user",
-				"user_id", id.String(),
-				"error", err,
-			)
-
-			if writeErr := httpx.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"INTERNAL_ERROR",
-				"internal server error",
-			); writeErr != nil {
-				h.log.Error(
-					"failed to write error response",
-					"user_id", id.String(),
-					"error", writeErr,
-				)
-			}
-		}
-
+		h.writeMappedError(w, err, "failed to update user", "user_id", id.String())
 		return
 	}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -136,6 +137,18 @@ func (r *PostgresRepository) UpdateUser(ctx context.Context, id uuid.UUID, user 
 		id,
 	)
 	if err != nil {
+		var postgresError *pgconn.PgError
+		if errors.As(err, &postgresError) && postgresError.Code == "23505" {
+			switch postgresError.ConstraintName {
+			case "users_email_key":
+				return ErrEmailAlreadyExists
+			case "users_phone_number_key":
+				return ErrPhoneNumberAlreadyExists
+			default:
+				return ErrUserConflict
+			}
+		}
+
 		return fmt.Errorf("update user by id: %w", err)
 	}
 
