@@ -13,3 +13,8 @@ type userSettingsResponse struct {
 	DefaultLanguage string    `json:"default_language"`
 	Theme           string    `json:"theme"`
 }
+type updateUserRequest struct {
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	PhoneNumber string `json:"phone_number"`
+}

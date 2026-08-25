@@ -45,3 +45,15 @@ func (s *Service) GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettin
 
 	return foundSettings, nil
 }
+func (s *Service) UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error {
+	if id == uuid.Nil {
+		return ErrInvalidUserID
+	}
+
+	err := s.repo.UpdateUser(ctx, id, user)
+	if err != nil {
+		return fmt.Errorf("update user: %w", err)
+	}
+
+	return nil
+}

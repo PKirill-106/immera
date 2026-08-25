@@ -23,3 +23,9 @@ type UserSettings struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
+
+type UpdateUserParams struct {
+	Name        string
+	Email       string
+	PhoneNumber string
+}

@@ -13,6 +13,7 @@ import (
 type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
+	UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error
 }
 
 type PostgresRepository struct {
@@ -115,4 +116,32 @@ func (r *PostgresRepository) GetUserSettings(
 	}
 
 	return userSettings, nil
+}
+
+func (r *PostgresRepository) UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error {
+	tag, err := r.pool.Exec(
+		ctx,
+		`
+		UPDATE users
+		SET 
+			name = $1,
+			email = $2,
+			phone_number = $3,
+			updated_at = now()
+		WHERE id = $4
+		`,
+		user.Name,
+		user.Email,
+		user.PhoneNumber,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("update user by id: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
 }

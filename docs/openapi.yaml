@@ -35,6 +35,32 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    put:
+      tags:
+        - User
+      summary: Update user by ID
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '204':
+          description: User updated successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /users/{userID}/settings:
     get:
       tags:
@@ -112,6 +138,21 @@ components:
         default_language:
           type: string
         theme:
+          type: string
+
+    UpdateUserRequest:
+      type: object
+      required:
+        - name
+        - email
+        - phone_number
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone_number:
           type: string
 
   responses:

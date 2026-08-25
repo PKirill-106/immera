@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"immera/internal/platform/httpx"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 type userService interface {
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
+	UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error
 }
 
 type Handler struct {
@@ -31,6 +33,7 @@ func NewHandler(service userService, log *slog.Logger) *Handler {
 func (h *Handler) Routes(router chi.Router) {
 	router.Get("/users/{userID}", h.GetByID)
 	router.Get("/users/{userID}/settings", h.GetUserSettings)
+	router.Put("/users/{userID}", h.UpdateUser)
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -202,4 +205,95 @@ func (h *Handler) GetUserSettings(w http.ResponseWriter, r *http.Request) {
 			"error", err,
 		)
 	}
+}
+
+func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "userID"))
+
+	if err != nil {
+		if writeErr := httpx.WriteError(
+			w,
+			http.StatusBadRequest,
+			"INVALID_USER_ID",
+			"invalid user id",
+		); writeErr != nil {
+			h.log.Error(
+				"failed to write error response",
+				"error", writeErr,
+			)
+		}
+
+		return
+	}
+
+	var req updateUserRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return
+	}
+
+	err = h.service.UpdateUser(
+		r.Context(),
+		id,
+		UpdateUserParams{
+			Name:        req.Name,
+			Email:       req.Email,
+			PhoneNumber: req.PhoneNumber,
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidUserID):
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusBadRequest,
+				"INVALID_USER_ID",
+				"invalid user id",
+			); writeErr != nil {
+				h.log.Error(
+					"failed to write error response",
+					"user_id", id.String(),
+					"error", writeErr,
+				)
+			}
+
+		case errors.Is(err, ErrUserNotFound):
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusNotFound,
+				"USER_NOT_FOUND",
+				"user not found",
+			); writeErr != nil {
+				h.log.Error(
+					"failed to write error response",
+					"user_id", id.String(),
+					"error", writeErr,
+				)
+			}
+
+		default:
+			h.log.Error(
+				"failed to update user",
+				"user_id", id.String(),
+				"error", err,
+			)
+
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"INTERNAL_ERROR",
+				"internal server error",
+			); writeErr != nil {
+				h.log.Error(
+					"failed to write error response",
+					"user_id", id.String(),
+					"error", writeErr,
+				)
+			}
+		}
+
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
