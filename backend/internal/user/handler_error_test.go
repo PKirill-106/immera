@@ -80,7 +80,7 @@ func TestMapError(t *testing.T) {
 			t.Parallel()
 
 			got := mapError(tt.err)
-			if got.status != tt.status || got.code != tt.code || got.message != tt.message {
+			if got.Status != tt.status || got.Code != tt.code || got.Message != tt.message {
 				t.Fatalf("mapError() = %#v, want status=%d code=%q message=%q", got, tt.status, tt.code, tt.message)
 			}
 		})
