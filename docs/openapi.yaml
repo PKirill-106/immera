@@ -89,6 +89,26 @@ paths:
           $ref: '#/components/responses/UserNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          $ref: '#/components/responses/RegisterBadRequest'
+        '409':
+          $ref: '#/components/responses/RegisterConflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   schemas:
@@ -165,9 +185,96 @@ components:
           type: string
           minLength: 1
           maxLength: 15
-          example: "+48123456789"
+          example: '+48123456789'
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        name:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          maxLength: 50
+        phone_number:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 15
+        password:
+          type: string
+          minLength: 8
+
+    AuthUser:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - phone_number
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type:
+            - string
+            - 'null'
+        email:
+          type: string
+          format: email
+        phone_number:
+          type:
+            - string
+            - 'null'
 
   responses:
+    RegisterBadRequest:
+      description: The registration request or email is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Malformed request body
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            invalidEmail:
+              summary: Invalid email address
+              value:
+                error:
+                  code: INVALID_EMAIL
+                  message: invalid email
+    RegisterConflict:
+      description: The email or phone number is already registered
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            emailAlreadyExists:
+              summary: Email already exists
+              value:
+                error:
+                  code: EMAIL_ALREADY_EXISTS
+                  message: email already exists
+            phoneNumberAlreadyExists:
+              summary: Phone number already exists
+              value:
+                error:
+                  code: PHONE_NUMBER_ALREADY_EXISTS
+                  message: phone number already exists
     InvalidUserID:
       description: The user ID is not a valid non-zero UUID
       content:
