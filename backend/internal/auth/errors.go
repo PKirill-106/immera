@@ -8,7 +8,15 @@ var (
 	ErrInvalidCredentials       = errors.New("invalid credentials")
 	ErrInvalidEmail             = errors.New("invalid email received")
 	ErrInvalidRequest           = errors.New("invalid data received")
-	ErrUnauthorized             = errors.New("unauthorized")
-	ErrInvalidToken             = errors.New("invalid token")
-	ErrExpiredToken             = errors.New("expired token")
+
+	ErrPasswordTooShort       = errors.New("password must be at least 8 characters")
+	ErrPasswordTooLong        = errors.New("password must be at most 40 characters and 72 bytes")
+	ErrPasswordMissingNumber  = errors.New("password must contain a number")
+	ErrPasswordMissingSpecial = errors.New("password must contain a special character")
+	ErrNameTooLong            = errors.New("name must be at most 25 characters")
+	ErrPhoneNumberTooLong     = errors.New("phone number must be at most 15 characters")
+
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrInvalidToken = errors.New("invalid token")
+	ErrExpiredToken = errors.New("expired token")
 )

@@ -46,6 +46,27 @@ func TestMapError(t *testing.T) {
 			message: "invalid email",
 		},
 		{
+			name:    "invalid password",
+			err:     ErrPasswordMissingSpecial,
+			status:  http.StatusBadRequest,
+			code:    "INVALID_PASSWORD",
+			message: "password must be 8 to 40 characters and contain a number and special character",
+		},
+		{
+			name:    "name too long",
+			err:     ErrNameTooLong,
+			status:  http.StatusBadRequest,
+			code:    "INVALID_NAME",
+			message: "name must be at most 25 characters",
+		},
+		{
+			name:    "phone number too long",
+			err:     ErrPhoneNumberTooLong,
+			status:  http.StatusBadRequest,
+			code:    "INVALID_PHONE_NUMBER",
+			message: "phone number must be at most 15 characters",
+		},
+		{
 			name:    "invalid request",
 			err:     ErrInvalidRequest,
 			status:  http.StatusBadRequest,

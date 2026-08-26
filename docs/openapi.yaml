@@ -197,8 +197,7 @@ components:
           type:
             - string
             - 'null'
-          minLength: 1
-          maxLength: 30
+          maxLength: 25
         email:
           type: string
           format: email
@@ -207,11 +206,12 @@ components:
           type:
             - string
             - 'null'
-          minLength: 1
           maxLength: 15
         password:
           type: string
           minLength: 8
+          maxLength: 40
+          description: Must contain at least one number and one punctuation or symbol character, and must not exceed 72 UTF-8 bytes
 
     AuthUser:
       type: object
@@ -256,6 +256,24 @@ components:
                 error:
                   code: INVALID_EMAIL
                   message: invalid email
+            invalidPassword:
+              summary: Invalid password
+              value:
+                error:
+                  code: INVALID_PASSWORD
+                  message: password must be 8 to 40 characters and contain a number and special character
+            invalidName:
+              summary: Name is too long
+              value:
+                error:
+                  code: INVALID_NAME
+                  message: name must be at most 25 characters
+            invalidPhoneNumber:
+              summary: Phone number is too long
+              value:
+                error:
+                  code: INVALID_PHONE_NUMBER
+                  message: phone number must be at most 15 characters
     RegisterConflict:
       description: The email or phone number is already registered
       content:

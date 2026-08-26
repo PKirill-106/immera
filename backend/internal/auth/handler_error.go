@@ -21,6 +21,27 @@ func mapError(err error) httpx.MappedError {
 			Code:    "PHONE_NUMBER_ALREADY_EXISTS",
 			Message: "phone number already exists",
 		}
+	case errors.Is(err, ErrPasswordTooShort),
+		errors.Is(err, ErrPasswordTooLong),
+		errors.Is(err, ErrPasswordMissingNumber),
+		errors.Is(err, ErrPasswordMissingSpecial):
+		return httpx.MappedError{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_PASSWORD",
+			Message: "password must be 8 to 40 characters and contain a number and special character",
+		}
+	case errors.Is(err, ErrNameTooLong):
+		return httpx.MappedError{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_NAME",
+			Message: "name must be at most 25 characters",
+		}
+	case errors.Is(err, ErrPhoneNumberTooLong):
+		return httpx.MappedError{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_PHONE_NUMBER",
+			Message: "phone number must be at most 15 characters",
+		}
 	case errors.Is(err, ErrInvalidCredentials):
 		return httpx.MappedError{
 			Status:  http.StatusUnauthorized,
