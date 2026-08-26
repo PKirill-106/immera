@@ -11,9 +11,9 @@ import (
 )
 
 type Repository interface {
-	RegisterUser(ctx context.Context, newUser RegisterUserParams) error
-	// LoginUser(ctx context.Context, email string, passwordHash string) (string, error)
-	// LogoutUser(ctx context.Context, id uuid.UUID) error
+	Register(ctx context.Context, registration RegisterParams) error
+	// Login(ctx context.Context, credentials LoginParams) (string, error)
+	// Logout(ctx context.Context, id uuid.UUID) error
 	// RefreshToken(ctx context.Context, token string) (string, error)
 }
 
@@ -27,7 +27,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	}
 }
 
-func (r *PostgresRepository) RegisterUser(ctx context.Context, newUser RegisterUserParams) error {
+func (r *PostgresRepository) Register(ctx context.Context, registration RegisterParams) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin registration transaction: %w", err)
@@ -50,10 +50,10 @@ func (r *PostgresRepository) RegisterUser(ctx context.Context, newUser RegisterU
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
 		`,
-		newUser.Name,
-		newUser.Email,
-		newUser.PhoneNumber,
-		newUser.PasswordHash,
+		registration.Name,
+		registration.Email,
+		registration.PhoneNumber,
+		registration.PasswordHash,
 	).Scan(&userID)
 	if err != nil {
 		return fmt.Errorf("insert registered user: %w", err)
@@ -83,9 +83,6 @@ func (r *PostgresRepository) RegisterUser(ctx context.Context, newUser RegisterU
 
 }
 
-// func (r *PostgresRepository) LoginUser(ctx context.Context, email string, passwordHash string) (string, error) {
-// }
-
-// func (r *PostgresRepository) LogoutUser(ctx context.Context, id uuid.UUID) error {}
+// func (r *PostgresRepository) Logout(ctx context.Context, id uuid.UUID) error {}
 
 // func (r *PostgresRepository) RefreshToken(ctx context.Context, token string) (string, error) {}

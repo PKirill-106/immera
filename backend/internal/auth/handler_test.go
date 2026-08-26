@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,36 +11,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"immera/internal/platform/httpx"
 )
 
 type stubAuthService struct {
 	registerErr error
-	registered  RegisterUserDTO
+	registered  RegisterDTO
 	called      bool
 }
 
-func (s *stubAuthService) RegisterUser(_ context.Context, newUser RegisterUserDTO) error {
+func (s *stubAuthService) Register(_ context.Context, registration RegisterDTO) error {
 	s.called = true
-	s.registered = newUser
+	s.registered = registration
 	return s.registerErr
 }
 
-func (*stubAuthService) LoginUser(context.Context, string, string) (string, error) {
-	return "", errors.New("not implemented")
-}
-
-func (*stubAuthService) LogoutUser(context.Context, uuid.UUID) error {
-	return errors.New("not implemented")
-}
-
-func (*stubAuthService) RefreshToken(context.Context, string) (string, error) {
-	return "", errors.New("not implemented")
-}
-
-func TestRegisterUserRejectsInvalidRequestBody(t *testing.T) {
+func TestRegisterRejectsInvalidRequestBody(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -62,7 +47,7 @@ func TestRegisterUserRejectsInvalidRequestBody(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(tt.body))
 			response := httptest.NewRecorder()
 
-			handler.RegisterUser(response, request)
+			handler.Register(response, request)
 
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
@@ -76,7 +61,7 @@ func TestRegisterUserRejectsInvalidRequestBody(t *testing.T) {
 	}
 }
 
-func TestRegisterUserMapsServiceError(t *testing.T) {
+func TestRegisterMapsServiceError(t *testing.T) {
 	t.Parallel()
 
 	service := &stubAuthService{
@@ -90,7 +75,7 @@ func TestRegisterUserMapsServiceError(t *testing.T) {
 	)
 	response := httptest.NewRecorder()
 
-	handler.RegisterUser(response, request)
+	handler.Register(response, request)
 
 	if response.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusConflict)
@@ -98,7 +83,7 @@ func TestRegisterUserMapsServiceError(t *testing.T) {
 	assertErrorResponse(t, response, "EMAIL_ALREADY_EXISTS", "email already exists")
 }
 
-func TestRegisterUserReturnsCreatedWithoutBody(t *testing.T) {
+func TestRegisterReturnsCreatedWithoutBody(t *testing.T) {
 	t.Parallel()
 
 	service := &stubAuthService{}
@@ -110,7 +95,7 @@ func TestRegisterUserReturnsCreatedWithoutBody(t *testing.T) {
 	)
 	response := httptest.NewRecorder()
 
-	handler.RegisterUser(response, request)
+	handler.Register(response, request)
 
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusCreated)

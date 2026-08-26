@@ -1,6 +1,6 @@
 package auth
 
-type RegisterUserParams struct {
+type RegisterParams struct {
 	Name         *string
 	Email        string
 	PhoneNumber  *string

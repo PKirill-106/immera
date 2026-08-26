@@ -12,9 +12,9 @@ import (
 )
 
 type authService interface {
-	RegisterUser(ctx context.Context, newUser RegisterUserDTO) error
-	// LoginUser(ctx context.Context, email string, passwordHash string) (string, error)
-	// LogoutUser(ctx context.Context, id uuid.UUID) error
+	Register(ctx context.Context, registration RegisterDTO) error
+	// Login(ctx context.Context, credentials LoginDTO) (TokenPair, error)
+	// Logout(ctx context.Context, id uuid.UUID) error
 	// RefreshToken(ctx context.Context, token string) (string, error)
 }
 
@@ -31,11 +31,11 @@ func NewHandler(service authService, log *slog.Logger) *Handler {
 }
 
 func (h *Handler) Routes(router chi.Router) {
-	router.Post("/auth/register", h.RegisterUser)
+	router.Post("/auth/register", h.Register)
 }
 
-func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
-	var req RegisterUserDTO
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req RegisterDTO
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 
@@ -49,7 +49,7 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.service.RegisterUser(r.Context(), req)
+	err := h.service.Register(r.Context(), req)
 	if err != nil {
 		h.writeMappedError(w, err, "failed to register user")
 		return

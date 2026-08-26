@@ -18,20 +18,20 @@ func NewService(repo Repository) *Service {
 	}
 }
 
-func (s *Service) RegisterUser(ctx context.Context, newUser RegisterUserDTO) error {
-	email := strings.ToLower(strings.TrimSpace(newUser.Email))
+func (s *Service) Register(ctx context.Context, registration RegisterDTO) error {
+	email := strings.ToLower(strings.TrimSpace(registration.Email))
 
-	name, err := normalizeOptionalField(newUser.Name, 25, ErrNameTooLong)
+	name, err := normalizeOptionalField(registration.Name, 25, ErrNameTooLong)
 	if err != nil {
 		return err
 	}
 
-	phoneNumber, err := normalizeOptionalField(newUser.PhoneNumber, 15, ErrPhoneNumberTooLong)
+	phoneNumber, err := normalizeOptionalField(registration.PhoneNumber, 15, ErrPhoneNumberTooLong)
 	if err != nil {
 		return err
 	}
 
-	if err := validatePassword(newUser.Password); err != nil {
+	if err := validatePassword(registration.Password); err != nil {
 		return err
 	}
 
@@ -40,12 +40,12 @@ func (s *Service) RegisterUser(ctx context.Context, newUser RegisterUserDTO) err
 		return ErrInvalidEmail
 	}
 
-	hash, err := hashPassword(newUser.Password)
+	hash, err := hashPassword(registration.Password)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	err = s.repo.RegisterUser(ctx, RegisterUserParams{
+	err = s.repo.Register(ctx, RegisterParams{
 		Name:         name,
 		Email:        parsedEmail.Address,
 		PhoneNumber:  phoneNumber,

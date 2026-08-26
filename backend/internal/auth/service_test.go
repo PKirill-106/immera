@@ -8,31 +8,31 @@ import (
 )
 
 type stubRepository struct {
-	registered RegisterUserParams
+	registered RegisterParams
 	called     bool
 	err        error
 }
 
-func (r *stubRepository) RegisterUser(_ context.Context, newUser RegisterUserParams) error {
+func (r *stubRepository) Register(_ context.Context, registration RegisterParams) error {
 	r.called = true
-	r.registered = newUser
+	r.registered = registration
 	return r.err
 }
 
-func TestRegisterUserNormalizesAndHashesInput(t *testing.T) {
+func TestRegisterNormalizesAndHashesInput(t *testing.T) {
 	t.Parallel()
 
 	repository := &stubRepository{}
 	service := NewService(repository)
 
-	err := service.RegisterUser(context.Background(), RegisterUserDTO{
+	err := service.Register(context.Background(), RegisterDTO{
 		Name:        stringPointer("  Jane Doe  "),
 		Email:       "  JANE@EXAMPLE.COM  ",
 		PhoneNumber: stringPointer("  +48123456789  "),
 		Password:    "password1!",
 	})
 	if err != nil {
-		t.Fatalf("RegisterUser() error = %v", err)
+		t.Fatalf("Register() error = %v", err)
 	}
 	if !repository.called {
 		t.Fatal("repository was not called")
@@ -54,18 +54,18 @@ func TestRegisterUserNormalizesAndHashesInput(t *testing.T) {
 	}
 }
 
-func TestRegisterUserAllowsOmittedOptionalFields(t *testing.T) {
+func TestRegisterAllowsOmittedOptionalFields(t *testing.T) {
 	t.Parallel()
 
 	repository := &stubRepository{}
 	service := NewService(repository)
 
-	err := service.RegisterUser(context.Background(), RegisterUserDTO{
+	err := service.Register(context.Background(), RegisterDTO{
 		Email:    "jane@example.com",
 		Password: "password1!",
 	})
 	if err != nil {
-		t.Fatalf("RegisterUser() error = %v", err)
+		t.Fatalf("Register() error = %v", err)
 	}
 	if repository.registered.Name != nil {
 		t.Fatalf("registered name = %v, want nil", repository.registered.Name)
@@ -75,20 +75,20 @@ func TestRegisterUserAllowsOmittedOptionalFields(t *testing.T) {
 	}
 }
 
-func TestRegisterUserPreservesEmptyOptionalFieldsForLaterPolicyDecision(t *testing.T) {
+func TestRegisterPreservesEmptyOptionalFieldsForLaterPolicyDecision(t *testing.T) {
 	t.Parallel()
 
 	repository := &stubRepository{}
 	service := NewService(repository)
 
-	err := service.RegisterUser(context.Background(), RegisterUserDTO{
+	err := service.Register(context.Background(), RegisterDTO{
 		Name:        stringPointer("   "),
 		Email:       "jane@example.com",
 		PhoneNumber: stringPointer("   "),
 		Password:    "password1!",
 	})
 	if err != nil {
-		t.Fatalf("RegisterUser() error = %v", err)
+		t.Fatalf("Register() error = %v", err)
 	}
 	if repository.registered.Name == nil || *repository.registered.Name != "" {
 		t.Fatalf("registered name = %v, want non-nil empty string", repository.registered.Name)
@@ -98,48 +98,48 @@ func TestRegisterUserPreservesEmptyOptionalFieldsForLaterPolicyDecision(t *testi
 	}
 }
 
-func TestRegisterUserRejectsInvalidFields(t *testing.T) {
+func TestRegisterRejectsInvalidFields(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		newUser   RegisterUserDTO
-		wantError error
+		name         string
+		registration RegisterDTO
+		wantError    error
 	}{
 		{
-			name:      "short password",
-			newUser:   RegisterUserDTO{Email: "jane@example.com", Password: "pass1!"},
-			wantError: ErrPasswordTooShort,
+			name:         "short password",
+			registration: RegisterDTO{Email: "jane@example.com", Password: "pass1!"},
+			wantError:    ErrPasswordTooShort,
 		},
 		{
-			name:      "password over 40 characters",
-			newUser:   RegisterUserDTO{Email: "jane@example.com", Password: strings.Repeat("a", 39) + "1!"},
-			wantError: ErrPasswordTooLong,
+			name:         "password over 40 characters",
+			registration: RegisterDTO{Email: "jane@example.com", Password: strings.Repeat("a", 39) + "1!"},
+			wantError:    ErrPasswordTooLong,
 		},
 		{
-			name:      "password over 72 bytes",
-			newUser:   RegisterUserDTO{Email: "jane@example.com", Password: strings.Repeat("🙂", 19) + "1!"},
-			wantError: ErrPasswordTooLong,
+			name:         "password over 72 bytes",
+			registration: RegisterDTO{Email: "jane@example.com", Password: strings.Repeat("🙂", 19) + "1!"},
+			wantError:    ErrPasswordTooLong,
 		},
 		{
-			name:      "password without number",
-			newUser:   RegisterUserDTO{Email: "jane@example.com", Password: "password!"},
-			wantError: ErrPasswordMissingNumber,
+			name:         "password without number",
+			registration: RegisterDTO{Email: "jane@example.com", Password: "password!"},
+			wantError:    ErrPasswordMissingNumber,
 		},
 		{
-			name:      "password without special character",
-			newUser:   RegisterUserDTO{Email: "jane@example.com", Password: "password1"},
-			wantError: ErrPasswordMissingSpecial,
+			name:         "password without special character",
+			registration: RegisterDTO{Email: "jane@example.com", Password: "password1"},
+			wantError:    ErrPasswordMissingSpecial,
 		},
 		{
-			name:      "name over 25 characters",
-			newUser:   RegisterUserDTO{Name: stringPointer(strings.Repeat("a", 26)), Email: "jane@example.com", Password: "password1!"},
-			wantError: ErrNameTooLong,
+			name:         "name over 25 characters",
+			registration: RegisterDTO{Name: stringPointer(strings.Repeat("a", 26)), Email: "jane@example.com", Password: "password1!"},
+			wantError:    ErrNameTooLong,
 		},
 		{
-			name:      "phone number over 15 characters",
-			newUser:   RegisterUserDTO{Email: "jane@example.com", PhoneNumber: stringPointer(strings.Repeat("1", 16)), Password: "password1!"},
-			wantError: ErrPhoneNumberTooLong,
+			name:         "phone number over 15 characters",
+			registration: RegisterDTO{Email: "jane@example.com", PhoneNumber: stringPointer(strings.Repeat("1", 16)), Password: "password1!"},
+			wantError:    ErrPhoneNumberTooLong,
 		},
 	}
 
@@ -150,9 +150,9 @@ func TestRegisterUserRejectsInvalidFields(t *testing.T) {
 			repository := &stubRepository{}
 			service := NewService(repository)
 
-			err := service.RegisterUser(context.Background(), tt.newUser)
+			err := service.Register(context.Background(), tt.registration)
 			if !errors.Is(err, tt.wantError) {
-				t.Fatalf("RegisterUser() error = %v, want %v", err, tt.wantError)
+				t.Fatalf("Register() error = %v, want %v", err, tt.wantError)
 			}
 			if repository.called {
 				t.Fatal("repository was called for invalid input")
