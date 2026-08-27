@@ -8,9 +8,9 @@ import (
 
 type User struct {
 	ID          uuid.UUID
-	Name        string
+	Name        *string
 	Email       string
-	PhoneNumber string
+	PhoneNumber *string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

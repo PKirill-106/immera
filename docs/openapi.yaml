@@ -89,6 +89,147 @@ paths:
           $ref: '#/components/responses/UserNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          $ref: '#/components/responses/RegisterBadRequest'
+        '409':
+          $ref: '#/components/responses/RegisterConflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in with email and password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: jane@example.com
+              password: password1!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example
+                refresh_token: 3fGQ7YVj2A4nP9xK8mL1sT6uW0cR5bHqE7dN2zJ4iXs
+        '400':
+          $ref: '#/components/responses/LoginBadRequest'
+        '401':
+          $ref: '#/components/responses/LoginUnauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Rotate a refresh token and issue a new token pair
+      operationId: refreshTokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token rotation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairResponse'
+        '400':
+          $ref: '#/components/responses/RefreshBadRequest'
+        '401':
+          $ref: '#/components/responses/RefreshUnauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Invalidate a refresh-token session
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '204':
+          description: Logout completed; unknown tokens are treated as already logged out
+        '400':
+          $ref: '#/components/responses/LogoutBadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/verify-email:
+    post:
+      tags:
+        - Auth
+      summary: Verify a user's email address
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: Email verified successfully
+        '400':
+          $ref: '#/components/responses/VerifyEmailBadRequest'
+        '404':
+          $ref: '#/components/responses/VerificationTokenNotFound'
+        '409':
+          $ref: '#/components/responses/VerificationConflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/resend-verification:
+    post:
+      tags:
+        - Auth
+      summary: Replace and resend an email-verification token
+      operationId: resendVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+      responses:
+        '204':
+          description: A new verification token was created and sent
+        '400':
+          $ref: '#/components/responses/ResendVerificationBadRequest'
+        '404':
+          $ref: '#/components/responses/ResendVerificationNotFound'
+        '409':
+          $ref: '#/components/responses/EmailAlreadyVerified'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   schemas:
@@ -165,9 +306,322 @@ components:
           type: string
           minLength: 1
           maxLength: 15
-          example: "+48123456789"
+          example: '+48123456789'
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        name:
+          type:
+            - string
+            - 'null'
+          maxLength: 25
+        email:
+          type: string
+          format: email
+          maxLength: 50
+        phone_number:
+          type:
+            - string
+            - 'null'
+          maxLength: 15
+        password:
+          type: string
+          minLength: 8
+          maxLength: 40
+          description: Must contain at least one number and one punctuation or symbol character, and must not exceed 72 UTF-8 bytes
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 50
+        password:
+          type: string
+          format: password
+
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+          description: Opaque refresh token returned by login or token refresh
+
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          minLength: 1
+          description: Opaque email-verification token
+
+    ResendVerificationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 50
+
+    TokenPairResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - access_token
+        - refresh_token
+      properties:
+        access_token:
+          type: string
+          description: Short-lived JWT access token
+        refresh_token:
+          type: string
+          description: Opaque token used to obtain a new access token
+
+    AuthUser:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - phone_number
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type:
+            - string
+            - 'null'
+        email:
+          type: string
+          format: email
+        phone_number:
+          type:
+            - string
+            - 'null'
 
   responses:
+    RegisterBadRequest:
+      description: The registration request or email is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Malformed request body
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            invalidEmail:
+              summary: Invalid email address
+              value:
+                error:
+                  code: INVALID_EMAIL
+                  message: invalid email
+            invalidPassword:
+              summary: Invalid password
+              value:
+                error:
+                  code: INVALID_PASSWORD
+                  message: password must be 8 to 40 characters and contain a number and special character
+            invalidName:
+              summary: Name is too long
+              value:
+                error:
+                  code: INVALID_NAME
+                  message: name must be at most 25 characters
+            invalidPhoneNumber:
+              summary: Phone number is too long
+              value:
+                error:
+                  code: INVALID_PHONE_NUMBER
+                  message: phone number must be at most 15 characters
+    RegisterConflict:
+      description: The email or phone number is already registered
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            emailAlreadyExists:
+              summary: Email already exists
+              value:
+                error:
+                  code: EMAIL_ALREADY_EXISTS
+                  message: email already exists
+            phoneNumberAlreadyExists:
+              summary: Phone number already exists
+              value:
+                error:
+                  code: PHONE_NUMBER_ALREADY_EXISTS
+                  message: phone number already exists
+    LoginBadRequest:
+      description: The login request body is malformed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: invalid request
+    LoginUnauthorized:
+      description: The email or password is incorrect
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_CREDENTIALS
+              message: invalid credentials
+    RefreshBadRequest:
+      description: The refresh request body or token is empty or malformed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: invalid request
+    RefreshUnauthorized:
+      description: The refresh token is unknown or expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRefreshToken:
+              summary: Refresh token is unknown or was already rotated
+              value:
+                error:
+                  code: INVALID_REFRESH_TOKEN
+                  message: invalid refresh token
+            expiredRefreshToken:
+              summary: Refresh token has expired
+              value:
+                error:
+                  code: REFRESH_TOKEN_EXPIRED
+                  message: refresh token expired
+    LogoutBadRequest:
+      description: The logout request body or refresh token is empty or malformed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: invalid request
+    VerifyEmailBadRequest:
+      description: The request is malformed or the verification token has expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Missing or malformed token
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            expiredToken:
+              summary: Verification token has expired
+              value:
+                error:
+                  code: VERIFICATION_TOKEN_EXPIRED
+                  message: verification token expired
+    VerificationTokenNotFound:
+      description: No email-verification record exists for the token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: VERIFICATION_TOKEN_NOT_FOUND
+              message: verification token not found
+    VerificationConflict:
+      description: The verification token was already used or the email is already verified
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            tokenUsed:
+              summary: Verification token was already used
+              value:
+                error:
+                  code: VERIFICATION_TOKEN_USED
+                  message: verification token already used
+            emailAlreadyVerified:
+              summary: The user's email was already verified
+              value:
+                error:
+                  code: EMAIL_ALREADY_VERIFIED
+                  message: email already verified
+    ResendVerificationBadRequest:
+      description: The resend request body or email address is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Malformed request body
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            invalidEmail:
+              summary: Invalid email address
+              value:
+                error:
+                  code: INVALID_EMAIL
+                  message: invalid email
+    ResendVerificationNotFound:
+      description: No user exists with the supplied email address
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: USER_NOT_FOUND
+              message: user not found
+    EmailAlreadyVerified:
+      description: The user's email address is already verified
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: EMAIL_ALREADY_VERIFIED
+              message: email already verified
     InvalidUserID:
       description: The user ID is not a valid non-zero UUID
       content:

@@ -2,6 +2,12 @@ package httpx
 
 import "net/http"
 
+type MappedError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
 type ErrorResponse struct {
 	Error ErrorBody `json:"error"`
 }
@@ -27,4 +33,10 @@ func WriteError(
 			},
 		},
 	)
+}
+
+func AppendLogError(attrs []any, err error) []any {
+	result := make([]any, 0, len(attrs)+2)
+	result = append(result, attrs...)
+	return append(result, "error", err)
 }

@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"immera/internal/auth"
 	"immera/internal/health"
 	"immera/internal/platform/apidocs"
 	"immera/internal/platform/config"
@@ -51,6 +52,18 @@ func run() error {
 		"../docs/openapi.yaml",
 	)
 
+	authRepository := auth.NewPostgresRepository(pool)
+	emailSender := auth.NewDevelopmentEmailSender(log)
+	authService := auth.NewService(
+		authRepository,
+		emailSender,
+		[]byte(cfg.Auth.JWTSecret),
+		cfg.Auth.AccessTokenTTL,
+		cfg.Auth.RefreshTokenTTL,
+		cfg.Auth.EmailVerificationTTL,
+	)
+	authHandler := auth.NewHandler(authService, log)
+
 	userRepository := user.NewPostgresRepository(pool)
 	userService := user.NewService(userRepository)
 	userHandler := user.NewHandler(userService, log)
@@ -61,6 +74,7 @@ func run() error {
 	},
 		[]httpserver.RouteRegistrar{
 			userHandler.Routes,
+			authHandler.Routes,
 		})
 	server := httpserver.NewServer(cfg.HTTP, router, log)
 

@@ -1,0 +1,862 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type stubRepository struct {
+	registered                  RegisterParams
+	registerCalled              bool
+	registerErr                 error
+	credentials                 UserCredentials
+	credentialsEmail            string
+	getCredentialsCalled        bool
+	getCredentialsErr           error
+	refreshUserID               uuid.UUID
+	refreshTokenHash            string
+	refreshExpiresAt            time.Time
+	refreshSessionCalled        bool
+	refreshSessionErr           error
+	refreshSessions             map[string]RefreshSession
+	refreshSession              RefreshSession
+	getRefreshTokenHash         string
+	getRefreshCalled            bool
+	getRefreshErr               error
+	rotateOldTokenHash          string
+	rotateNewTokenHash          string
+	rotateUserID                uuid.UUID
+	rotateExpiresAt             time.Time
+	rotateCalled                bool
+	rotateErr                   error
+	deleteRefreshTokenHash      string
+	deleteRefreshCalled         bool
+	deleteRefreshErr            error
+	verification                EmailVerification
+	getVerificationTokenHash    string
+	getVerificationCalled       bool
+	getVerificationErr          error
+	verifiedVerificationID      uuid.UUID
+	verifiedUserID              uuid.UUID
+	verifiedAt                  time.Time
+	verifyCalled                bool
+	verifyErr                   error
+	verificationStatus          UserVerificationStatus
+	verificationStatusEmail     string
+	getVerificationStatusCalled bool
+	getVerificationStatusErr    error
+	replacementUserID           uuid.UUID
+	replacementTokenHash        string
+	replacementExpiresAt        time.Time
+	replaceVerificationCalled   bool
+	replaceVerificationErr      error
+}
+
+func (r *stubRepository) Register(_ context.Context, registration RegisterParams) error {
+	r.registerCalled = true
+	r.registered = registration
+	return r.registerErr
+}
+
+func (r *stubRepository) GetCredentialsByEmail(_ context.Context, email string) (UserCredentials, error) {
+	r.getCredentialsCalled = true
+	r.credentialsEmail = email
+	return r.credentials, r.getCredentialsErr
+}
+
+func (r *stubRepository) CreateRefreshSession(
+	_ context.Context,
+	userID uuid.UUID,
+	refreshTokenHash string,
+	refreshExpiresAt time.Time,
+) error {
+	r.refreshSessionCalled = true
+	r.refreshUserID = userID
+	r.refreshTokenHash = refreshTokenHash
+	r.refreshExpiresAt = refreshExpiresAt
+	return r.refreshSessionErr
+}
+
+func (r *stubRepository) GetRefreshSessionByTokenHash(
+	_ context.Context,
+	tokenHash string,
+) (RefreshSession, error) {
+	r.getRefreshCalled = true
+	r.getRefreshTokenHash = tokenHash
+	if r.getRefreshErr != nil {
+		return RefreshSession{}, r.getRefreshErr
+	}
+	if r.refreshSessions != nil {
+		session, ok := r.refreshSessions[tokenHash]
+		if !ok {
+			return RefreshSession{}, ErrRefreshTokenNotFound
+		}
+		return session, nil
+	}
+
+	return r.refreshSession, nil
+}
+
+func (r *stubRepository) RotateRefreshSession(
+	_ context.Context,
+	oldTokenHash string,
+	userID uuid.UUID,
+	newTokenHash string,
+	newExpiresAt time.Time,
+) error {
+	r.rotateCalled = true
+	r.rotateOldTokenHash = oldTokenHash
+	r.rotateUserID = userID
+	r.rotateNewTokenHash = newTokenHash
+	r.rotateExpiresAt = newExpiresAt
+	if r.rotateErr != nil {
+		return r.rotateErr
+	}
+	if r.refreshSessions != nil {
+		if _, ok := r.refreshSessions[oldTokenHash]; !ok {
+			return ErrRefreshTokenNotFound
+		}
+		delete(r.refreshSessions, oldTokenHash)
+		r.refreshSessions[newTokenHash] = RefreshSession{UserID: userID, ExpiresAt: newExpiresAt}
+	}
+
+	return nil
+}
+
+func (r *stubRepository) DeleteRefreshSessionByTokenHash(
+	_ context.Context,
+	tokenHash string,
+) error {
+	r.deleteRefreshCalled = true
+	r.deleteRefreshTokenHash = tokenHash
+	if r.deleteRefreshErr != nil {
+		return r.deleteRefreshErr
+	}
+	if r.refreshSessions != nil {
+		delete(r.refreshSessions, tokenHash)
+	}
+
+	return nil
+}
+
+func (r *stubRepository) GetEmailVerificationByTokenHash(
+	_ context.Context,
+	tokenHash string,
+) (EmailVerification, error) {
+	r.getVerificationCalled = true
+	r.getVerificationTokenHash = tokenHash
+	if r.getVerificationErr != nil {
+		return EmailVerification{}, r.getVerificationErr
+	}
+
+	return r.verification, nil
+}
+
+func (r *stubRepository) VerifyEmail(
+	_ context.Context,
+	verificationID uuid.UUID,
+	userID uuid.UUID,
+	verifiedAt time.Time,
+) error {
+	r.verifyCalled = true
+	r.verifiedVerificationID = verificationID
+	r.verifiedUserID = userID
+	r.verifiedAt = verifiedAt
+	return r.verifyErr
+}
+
+func (r *stubRepository) GetUserVerificationStatusByEmail(
+	_ context.Context,
+	email string,
+) (UserVerificationStatus, error) {
+	r.getVerificationStatusCalled = true
+	r.verificationStatusEmail = email
+	if r.getVerificationStatusErr != nil {
+		return UserVerificationStatus{}, r.getVerificationStatusErr
+	}
+
+	return r.verificationStatus, nil
+}
+
+func (r *stubRepository) ReplaceEmailVerificationToken(
+	_ context.Context,
+	userID uuid.UUID,
+	tokenHash string,
+	expiresAt time.Time,
+) error {
+	r.replaceVerificationCalled = true
+	r.replacementUserID = userID
+	r.replacementTokenHash = tokenHash
+	r.replacementExpiresAt = expiresAt
+	return r.replaceVerificationErr
+}
+
+type stubEmailSender struct {
+	email  string
+	token  string
+	called bool
+	err    error
+}
+
+func (s *stubEmailSender) SendVerificationEmail(
+	_ context.Context,
+	email string,
+	token string,
+) error {
+	s.called = true
+	s.email = email
+	s.token = token
+	return s.err
+}
+
+func TestRegisterNormalizesAndHashesInput(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{}
+	service := newTestService(repository)
+
+	err := service.Register(context.Background(), RegisterDTO{
+		Name:        stringPointer("  Jane Doe  "),
+		Email:       "  JANE@EXAMPLE.COM  ",
+		PhoneNumber: stringPointer("  +48123456789  "),
+		Password:    "password1!",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if !repository.registerCalled {
+		t.Fatal("repository was not called")
+	}
+	if repository.registered.Name == nil || *repository.registered.Name != "Jane Doe" {
+		t.Fatalf("registered name = %v, want Jane Doe", repository.registered.Name)
+	}
+	if repository.registered.Email != "jane@example.com" {
+		t.Fatalf("registered email = %q, want jane@example.com", repository.registered.Email)
+	}
+	if repository.registered.PhoneNumber == nil || *repository.registered.PhoneNumber != "+48123456789" {
+		t.Fatalf("registered phone number = %v, want +48123456789", repository.registered.PhoneNumber)
+	}
+	if repository.registered.PasswordHash == "password1!" {
+		t.Fatal("repository received the raw password")
+	}
+	if err := comparePassword(repository.registered.PasswordHash, "password1!"); err != nil {
+		t.Fatalf("stored password hash does not match password: %v", err)
+	}
+}
+
+func TestRegisterAllowsOmittedOptionalFields(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{}
+	service := newTestService(repository)
+
+	err := service.Register(context.Background(), RegisterDTO{
+		Email:    "jane@example.com",
+		Password: "password1!",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if repository.registered.Name != nil {
+		t.Fatalf("registered name = %v, want nil", repository.registered.Name)
+	}
+	if repository.registered.PhoneNumber != nil {
+		t.Fatalf("registered phone number = %v, want nil", repository.registered.PhoneNumber)
+	}
+}
+
+func TestRegisterPreservesEmptyOptionalNameForLaterPolicyDecision(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{}
+	service := newTestService(repository)
+
+	err := service.Register(context.Background(), RegisterDTO{
+		Name:     stringPointer("   "),
+		Email:    "jane@example.com",
+		Password: "password1!",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if repository.registered.Name == nil || *repository.registered.Name != "" {
+		t.Fatalf("registered name = %v, want non-nil empty string", repository.registered.Name)
+	}
+	if repository.registered.PhoneNumber != nil {
+		t.Fatalf("registered phone number = %v, want nil", repository.registered.PhoneNumber)
+	}
+}
+
+func TestRegisterRejectsInvalidFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		registration RegisterDTO
+		wantError    error
+	}{
+		{
+			name:         "short password",
+			registration: RegisterDTO{Email: "jane@example.com", Password: "pass1!"},
+			wantError:    ErrPasswordTooShort,
+		},
+		{
+			name:         "password over 40 characters",
+			registration: RegisterDTO{Email: "jane@example.com", Password: strings.Repeat("a", 39) + "1!"},
+			wantError:    ErrPasswordTooLong,
+		},
+		{
+			name:         "password over 72 bytes",
+			registration: RegisterDTO{Email: "jane@example.com", Password: strings.Repeat("🙂", 19) + "1!"},
+			wantError:    ErrPasswordTooLong,
+		},
+		{
+			name:         "password without number",
+			registration: RegisterDTO{Email: "jane@example.com", Password: "password!"},
+			wantError:    ErrPasswordMissingNumber,
+		},
+		{
+			name:         "password without special character",
+			registration: RegisterDTO{Email: "jane@example.com", Password: "password1"},
+			wantError:    ErrPasswordMissingSpecial,
+		},
+		{
+			name:         "name over 25 characters",
+			registration: RegisterDTO{Name: stringPointer(strings.Repeat("a", 26)), Email: "jane@example.com", Password: "password1!"},
+			wantError:    ErrNameTooLong,
+		},
+		{
+			name:         "phone number over 15 characters",
+			registration: RegisterDTO{Email: "jane@example.com", PhoneNumber: stringPointer(strings.Repeat("1", 16)), Password: "password1!"},
+			wantError:    ErrPhoneNumberTooLong,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			repository := &stubRepository{}
+			service := newTestService(repository)
+
+			err := service.Register(context.Background(), tt.registration)
+			if !errors.Is(err, tt.wantError) {
+				t.Fatalf("Register() error = %v, want %v", err, tt.wantError)
+			}
+			if repository.registerCalled {
+				t.Fatal("repository was called for invalid input")
+			}
+		})
+	}
+}
+
+func TestLoginNormalizesEmailAndCreatesRefreshSession(t *testing.T) {
+	t.Parallel()
+
+	passwordHash, err := hashPassword("password1!")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+
+	userID := uuid.New()
+	repository := &stubRepository{
+		credentials: UserCredentials{
+			ID:           userID,
+			Email:        "jane@example.com",
+			PasswordHash: passwordHash,
+		},
+	}
+	service := newTestService(repository)
+	beforeExpiry := time.Now().Add(testRefreshTTL)
+
+	tokens, err := service.Login(context.Background(), LoginParams{
+		Email:    "  JANE@EXAMPLE.COM  ",
+		Password: "password1!",
+	})
+	afterExpiry := time.Now().Add(testRefreshTTL)
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if repository.credentialsEmail != "jane@example.com" {
+		t.Fatalf("credentials email = %q, want jane@example.com", repository.credentialsEmail)
+	}
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" {
+		t.Fatalf("tokens = %#v, want non-empty access and refresh tokens", tokens)
+	}
+	if !repository.refreshSessionCalled {
+		t.Fatal("refresh session repository method was not called")
+	}
+	if repository.refreshUserID != userID {
+		t.Fatalf("refresh user ID = %s, want %s", repository.refreshUserID, userID)
+	}
+	if repository.refreshTokenHash != hashRefreshToken(tokens.RefreshToken) {
+		t.Fatal("stored refresh token hash does not match the returned refresh token")
+	}
+	if repository.refreshTokenHash == tokens.RefreshToken {
+		t.Fatal("repository received the raw refresh token")
+	}
+	if repository.refreshExpiresAt.Before(beforeExpiry) || repository.refreshExpiresAt.After(afterExpiry) {
+		t.Fatalf(
+			"refresh expiry = %v, want between %v and %v",
+			repository.refreshExpiresAt,
+			beforeExpiry,
+			afterExpiry,
+		)
+	}
+}
+
+func TestLoginReturnsInvalidCredentials(t *testing.T) {
+	t.Parallel()
+
+	passwordHash, err := hashPassword("password1!")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		repository *stubRepository
+		password   string
+		wantLookup bool
+	}{
+		{
+			name: "user not found",
+			repository: &stubRepository{
+				getCredentialsErr: ErrUserNotFound,
+			},
+			password:   "password1!",
+			wantLookup: true,
+		},
+		{
+			name: "incorrect password",
+			repository: &stubRepository{
+				credentials: UserCredentials{
+					ID:           uuid.New(),
+					Email:        "jane@example.com",
+					PasswordHash: passwordHash,
+				},
+			},
+			password:   "incorrect1!",
+			wantLookup: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			service := newTestService(tt.repository)
+			tokens, err := service.Login(context.Background(), LoginParams{
+				Email:    "jane@example.com",
+				Password: tt.password,
+			})
+			if !errors.Is(err, ErrInvalidCredentials) {
+				t.Fatalf("Login() error = %v, want %v", err, ErrInvalidCredentials)
+			}
+			if tokens != (TokenPair{}) {
+				t.Fatalf("tokens = %#v, want empty token pair", tokens)
+			}
+			if tt.repository.getCredentialsCalled != tt.wantLookup {
+				t.Fatalf("credentials lookup called = %t, want %t", tt.repository.getCredentialsCalled, tt.wantLookup)
+			}
+			if tt.repository.refreshSessionCalled {
+				t.Fatal("refresh session was created for invalid credentials")
+			}
+		})
+	}
+}
+
+func TestLoginReturnsRefreshSessionErrorWithoutTokens(t *testing.T) {
+	t.Parallel()
+
+	passwordHash, err := hashPassword("password1!")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+
+	repositoryError := errors.New("database unavailable")
+	repository := &stubRepository{
+		credentials: UserCredentials{
+			ID:           uuid.New(),
+			Email:        "jane@example.com",
+			PasswordHash: passwordHash,
+		},
+		refreshSessionErr: repositoryError,
+	}
+	service := newTestService(repository)
+
+	tokens, err := service.Login(context.Background(), LoginParams{
+		Email:    "jane@example.com",
+		Password: "password1!",
+	})
+	if !errors.Is(err, repositoryError) {
+		t.Fatalf("Login() error = %v, want wrapped %v", err, repositoryError)
+	}
+	if tokens != (TokenPair{}) {
+		t.Fatalf("tokens = %#v, want empty token pair", tokens)
+	}
+}
+
+func TestRegisterCreatesAndSendsVerificationToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{}
+	sender := &stubEmailSender{}
+	service := newTestServiceWithSender(repository, sender)
+	beforeExpiry := time.Now().Add(testEmailVerificationTTL)
+
+	err := service.Register(context.Background(), RegisterDTO{
+		Email:    "jane@example.com",
+		Password: "password1!",
+	})
+	afterExpiry := time.Now().Add(testEmailVerificationTTL)
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if !sender.called || sender.email != "jane@example.com" || sender.token == "" {
+		t.Fatalf("verification email = %#v, want jane@example.com with a token", sender)
+	}
+	if repository.registered.VerificationTokenHash != hashVerificationToken(sender.token) {
+		t.Fatal("stored verification hash does not match the emailed token")
+	}
+	if repository.registered.VerificationTokenHash == sender.token {
+		t.Fatal("repository received the raw verification token")
+	}
+	if repository.registered.VerificationTokenExpiresAt.Before(beforeExpiry) ||
+		repository.registered.VerificationTokenExpiresAt.After(afterExpiry) {
+		t.Fatalf(
+			"verification expiry = %v, want between %v and %v",
+			repository.registered.VerificationTokenExpiresAt,
+			beforeExpiry,
+			afterExpiry,
+		)
+	}
+}
+
+func TestRefreshRotatesTokenAndInvalidatesOldToken(t *testing.T) {
+	t.Parallel()
+
+	oldToken := "old-refresh-token"
+	oldTokenHash := hashRefreshToken(oldToken)
+	userID := uuid.New()
+	repository := &stubRepository{
+		refreshSessions: map[string]RefreshSession{
+			oldTokenHash: {
+				UserID:    userID,
+				ExpiresAt: time.Now().Add(time.Hour),
+			},
+		},
+	}
+	service := newTestService(repository)
+
+	tokens, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: oldToken})
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.RefreshToken == oldToken {
+		t.Fatalf("tokens = %#v, want new access and refresh tokens", tokens)
+	}
+	if _, exists := repository.refreshSessions[oldTokenHash]; exists {
+		t.Fatal("old refresh token hash still exists after rotation")
+	}
+	newTokenHash := hashRefreshToken(tokens.RefreshToken)
+	newSession, exists := repository.refreshSessions[newTokenHash]
+	if !exists {
+		t.Fatal("new refresh token hash was not stored")
+	}
+	if newSession.UserID != userID {
+		t.Fatalf("new refresh session user ID = %s, want %s", newSession.UserID, userID)
+	}
+
+	secondTokens, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: oldToken})
+	if !errors.Is(err, ErrRefreshTokenNotFound) {
+		t.Fatalf("second Refresh() error = %v, want %v", err, ErrRefreshTokenNotFound)
+	}
+	if secondTokens != (TokenPair{}) {
+		t.Fatalf("second tokens = %#v, want empty token pair", secondTokens)
+	}
+}
+
+func TestRefreshRejectsUnknownToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{refreshSessions: make(map[string]RefreshSession)}
+	service := newTestService(repository)
+
+	tokens, err := service.Refresh(
+		context.Background(),
+		RefreshParams{RefreshToken: "unknown-refresh-token"},
+	)
+	if !errors.Is(err, ErrRefreshTokenNotFound) {
+		t.Fatalf("Refresh() error = %v, want %v", err, ErrRefreshTokenNotFound)
+	}
+	if tokens != (TokenPair{}) || repository.rotateCalled {
+		t.Fatalf("tokens = %#v, rotate called = %t", tokens, repository.rotateCalled)
+	}
+}
+
+func TestRefreshRejectsExpiredToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{
+		refreshSession: RefreshSession{
+			UserID:    uuid.New(),
+			ExpiresAt: time.Now().Add(-time.Minute),
+		},
+	}
+	service := newTestService(repository)
+
+	tokens, err := service.Refresh(
+		context.Background(),
+		RefreshParams{RefreshToken: "expired-refresh-token"},
+	)
+	if !errors.Is(err, ErrRefreshTokenExpired) {
+		t.Fatalf("Refresh() error = %v, want %v", err, ErrRefreshTokenExpired)
+	}
+	if tokens != (TokenPair{}) || repository.rotateCalled {
+		t.Fatalf("tokens = %#v, rotate called = %t", tokens, repository.rotateCalled)
+	}
+}
+
+func TestRefreshWrapsRepositoryFailure(t *testing.T) {
+	t.Parallel()
+
+	repositoryError := errors.New("database unavailable")
+	repository := &stubRepository{getRefreshErr: repositoryError}
+	service := newTestService(repository)
+
+	_, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: "refresh-token"})
+	if !errors.Is(err, repositoryError) {
+		t.Fatalf("Refresh() error = %v, want wrapped %v", err, repositoryError)
+	}
+}
+
+func TestLogoutDeletesRefreshSession(t *testing.T) {
+	t.Parallel()
+
+	rawToken := "refresh-token"
+	tokenHash := hashRefreshToken(rawToken)
+	repository := &stubRepository{
+		refreshSessions: map[string]RefreshSession{
+			tokenHash: {UserID: uuid.New(), ExpiresAt: time.Now().Add(time.Hour)},
+		},
+	}
+	service := newTestService(repository)
+
+	if err := service.Logout(context.Background(), LogoutParams{RefreshToken: rawToken}); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if repository.deleteRefreshTokenHash != tokenHash {
+		t.Fatalf("deleted token hash = %q, want %q", repository.deleteRefreshTokenHash, tokenHash)
+	}
+	if _, exists := repository.refreshSessions[tokenHash]; exists {
+		t.Fatal("refresh session still exists after logout")
+	}
+}
+
+func TestLogoutUnknownTokenIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{refreshSessions: make(map[string]RefreshSession)}
+	service := newTestService(repository)
+
+	if err := service.Logout(
+		context.Background(),
+		LogoutParams{RefreshToken: "unknown-refresh-token"},
+	); err != nil {
+		t.Fatalf("Logout() error = %v, want nil", err)
+	}
+}
+
+func TestVerifyEmailMarksTokenAndUserVerified(t *testing.T) {
+	t.Parallel()
+
+	verificationID := uuid.New()
+	userID := uuid.New()
+	rawToken := "verification-token"
+	repository := &stubRepository{
+		verification: EmailVerification{
+			ID:        verificationID,
+			UserID:    userID,
+			ExpiresAt: time.Now().Add(time.Hour),
+		},
+	}
+	service := newTestService(repository)
+
+	if err := service.VerifyEmail(
+		context.Background(),
+		VerifyEmailParams{Token: rawToken},
+	); err != nil {
+		t.Fatalf("VerifyEmail() error = %v", err)
+	}
+	if repository.getVerificationTokenHash != hashVerificationToken(rawToken) {
+		t.Fatal("repository did not receive the verification token hash")
+	}
+	if !repository.verifyCalled || repository.verifiedVerificationID != verificationID || repository.verifiedUserID != userID {
+		t.Fatalf(
+			"verification call = called:%t verification:%s user:%s",
+			repository.verifyCalled,
+			repository.verifiedVerificationID,
+			repository.verifiedUserID,
+		)
+	}
+}
+
+func TestVerifyEmailRejectsExpiredToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{
+		verification: EmailVerification{
+			ID:        uuid.New(),
+			UserID:    uuid.New(),
+			ExpiresAt: time.Now().Add(-time.Minute),
+		},
+	}
+	service := newTestService(repository)
+
+	err := service.VerifyEmail(context.Background(), VerifyEmailParams{Token: "expired-token"})
+	if !errors.Is(err, ErrVerificationTokenExpired) {
+		t.Fatalf("VerifyEmail() error = %v, want %v", err, ErrVerificationTokenExpired)
+	}
+	if repository.verifyCalled {
+		t.Fatal("repository marked an expired verification token as used")
+	}
+}
+
+func TestVerifyEmailRejectsUsedToken(t *testing.T) {
+	t.Parallel()
+
+	usedAt := time.Now().Add(-time.Minute)
+	repository := &stubRepository{
+		verification: EmailVerification{
+			ID:        uuid.New(),
+			UserID:    uuid.New(),
+			ExpiresAt: time.Now().Add(time.Hour),
+			UsedAt:    &usedAt,
+		},
+	}
+	service := newTestService(repository)
+
+	err := service.VerifyEmail(context.Background(), VerifyEmailParams{Token: "used-token"})
+	if !errors.Is(err, ErrVerificationTokenUsed) {
+		t.Fatalf("VerifyEmail() error = %v, want %v", err, ErrVerificationTokenUsed)
+	}
+	if repository.verifyCalled {
+		t.Fatal("repository verified an already-used token")
+	}
+}
+
+func TestVerifyEmailWrapsRepositoryFailure(t *testing.T) {
+	t.Parallel()
+
+	repositoryError := errors.New("database unavailable")
+	repository := &stubRepository{getVerificationErr: repositoryError}
+	service := newTestService(repository)
+
+	err := service.VerifyEmail(context.Background(), VerifyEmailParams{Token: "verification-token"})
+	if !errors.Is(err, repositoryError) {
+		t.Fatalf("VerifyEmail() error = %v, want wrapped %v", err, repositoryError)
+	}
+}
+
+func TestResendVerificationReplacesTokenAndSendsEmail(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	repository := &stubRepository{
+		verificationStatus: UserVerificationStatus{
+			ID:    userID,
+			Email: "jane@example.com",
+		},
+	}
+	sender := &stubEmailSender{}
+	service := newTestServiceWithSender(repository, sender)
+	beforeExpiry := time.Now().Add(testEmailVerificationTTL)
+
+	err := service.ResendVerification(context.Background(), ResendVerificationParams{
+		Email: "  JANE@EXAMPLE.COM  ",
+	})
+	afterExpiry := time.Now().Add(testEmailVerificationTTL)
+	if err != nil {
+		t.Fatalf("ResendVerification() error = %v", err)
+	}
+	if repository.verificationStatusEmail != "jane@example.com" {
+		t.Fatalf("status email = %q, want jane@example.com", repository.verificationStatusEmail)
+	}
+	if !repository.replaceVerificationCalled || repository.replacementUserID != userID {
+		t.Fatal("replacement verification token was not stored")
+	}
+	if !sender.called || sender.email != "jane@example.com" || sender.token == "" {
+		t.Fatalf("verification email = %#v, want jane@example.com with a token", sender)
+	}
+	if repository.replacementTokenHash != hashVerificationToken(sender.token) {
+		t.Fatal("stored replacement hash does not match the emailed token")
+	}
+	if repository.replacementExpiresAt.Before(beforeExpiry) ||
+		repository.replacementExpiresAt.After(afterExpiry) {
+		t.Fatalf(
+			"replacement expiry = %v, want between %v and %v",
+			repository.replacementExpiresAt,
+			beforeExpiry,
+			afterExpiry,
+		)
+	}
+}
+
+func TestResendVerificationRejectsAlreadyVerifiedUser(t *testing.T) {
+	t.Parallel()
+
+	verifiedAt := time.Now().Add(-time.Hour)
+	repository := &stubRepository{
+		verificationStatus: UserVerificationStatus{
+			ID:              uuid.New(),
+			Email:           "jane@example.com",
+			EmailVerifiedAt: &verifiedAt,
+		},
+	}
+	sender := &stubEmailSender{}
+	service := newTestServiceWithSender(repository, sender)
+
+	err := service.ResendVerification(
+		context.Background(),
+		ResendVerificationParams{Email: "jane@example.com"},
+	)
+	if !errors.Is(err, ErrEmailAlreadyVerified) {
+		t.Fatalf("ResendVerification() error = %v, want %v", err, ErrEmailAlreadyVerified)
+	}
+	if repository.replaceVerificationCalled || sender.called {
+		t.Fatal("created or sent a token for an already-verified user")
+	}
+}
+
+const (
+	testAccessTTL            = 15 * time.Minute
+	testRefreshTTL           = 24 * time.Hour
+	testEmailVerificationTTL = 2 * time.Hour
+)
+
+var testJWTSecret = []byte("test-secret-that-is-at-least-32-bytes")
+
+func newTestService(repository Repository) *Service {
+	return newTestServiceWithSender(repository, &stubEmailSender{})
+}
+
+func newTestServiceWithSender(repository Repository, sender EmailSender) *Service {
+	return NewService(
+		repository,
+		sender,
+		testJWTSecret,
+		testAccessTTL,
+		testRefreshTTL,
+		testEmailVerificationTTL,
+	)
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
