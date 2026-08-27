@@ -23,6 +23,17 @@ type stubRepository struct {
 	refreshExpiresAt     time.Time
 	refreshSessionCalled bool
 	refreshSessionErr    error
+	refreshSessions      map[string]RefreshSession
+	refreshSession       RefreshSession
+	getRefreshTokenHash  string
+	getRefreshCalled     bool
+	getRefreshErr        error
+	rotateOldTokenHash   string
+	rotateNewTokenHash   string
+	rotateUserID         uuid.UUID
+	rotateExpiresAt      time.Time
+	rotateCalled         bool
+	rotateErr            error
 }
 
 func (r *stubRepository) Register(_ context.Context, registration RegisterParams) error {
@@ -48,6 +59,52 @@ func (r *stubRepository) CreateRefreshSession(
 	r.refreshTokenHash = refreshTokenHash
 	r.refreshExpiresAt = refreshExpiresAt
 	return r.refreshSessionErr
+}
+
+func (r *stubRepository) GetRefreshSessionByTokenHash(
+	_ context.Context,
+	tokenHash string,
+) (RefreshSession, error) {
+	r.getRefreshCalled = true
+	r.getRefreshTokenHash = tokenHash
+	if r.getRefreshErr != nil {
+		return RefreshSession{}, r.getRefreshErr
+	}
+	if r.refreshSessions != nil {
+		session, ok := r.refreshSessions[tokenHash]
+		if !ok {
+			return RefreshSession{}, ErrRefreshTokenNotFound
+		}
+		return session, nil
+	}
+
+	return r.refreshSession, nil
+}
+
+func (r *stubRepository) RotateRefreshSession(
+	_ context.Context,
+	oldTokenHash string,
+	userID uuid.UUID,
+	newTokenHash string,
+	newExpiresAt time.Time,
+) error {
+	r.rotateCalled = true
+	r.rotateOldTokenHash = oldTokenHash
+	r.rotateUserID = userID
+	r.rotateNewTokenHash = newTokenHash
+	r.rotateExpiresAt = newExpiresAt
+	if r.rotateErr != nil {
+		return r.rotateErr
+	}
+	if r.refreshSessions != nil {
+		if _, ok := r.refreshSessions[oldTokenHash]; !ok {
+			return ErrRefreshTokenNotFound
+		}
+		delete(r.refreshSessions, oldTokenHash)
+		r.refreshSessions[newTokenHash] = RefreshSession{UserID: userID, ExpiresAt: newExpiresAt}
+	}
+
+	return nil
 }
 
 func TestRegisterNormalizesAndHashesInput(t *testing.T) {
@@ -335,6 +392,104 @@ func TestLoginReturnsRefreshSessionErrorWithoutTokens(t *testing.T) {
 	}
 	if tokens != (TokenPair{}) {
 		t.Fatalf("tokens = %#v, want empty token pair", tokens)
+	}
+}
+
+func TestRefreshRotatesTokenAndInvalidatesOldToken(t *testing.T) {
+	t.Parallel()
+
+	oldToken := "old-refresh-token"
+	oldTokenHash := hashRefreshToken(oldToken)
+	userID := uuid.New()
+	repository := &stubRepository{
+		refreshSessions: map[string]RefreshSession{
+			oldTokenHash: {
+				UserID:    userID,
+				ExpiresAt: time.Now().Add(time.Hour),
+			},
+		},
+	}
+	service := newTestService(repository)
+
+	tokens, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: oldToken})
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.RefreshToken == oldToken {
+		t.Fatalf("tokens = %#v, want new access and refresh tokens", tokens)
+	}
+	if _, exists := repository.refreshSessions[oldTokenHash]; exists {
+		t.Fatal("old refresh token hash still exists after rotation")
+	}
+	newTokenHash := hashRefreshToken(tokens.RefreshToken)
+	newSession, exists := repository.refreshSessions[newTokenHash]
+	if !exists {
+		t.Fatal("new refresh token hash was not stored")
+	}
+	if newSession.UserID != userID {
+		t.Fatalf("new refresh session user ID = %s, want %s", newSession.UserID, userID)
+	}
+
+	secondTokens, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: oldToken})
+	if !errors.Is(err, ErrRefreshTokenNotFound) {
+		t.Fatalf("second Refresh() error = %v, want %v", err, ErrRefreshTokenNotFound)
+	}
+	if secondTokens != (TokenPair{}) {
+		t.Fatalf("second tokens = %#v, want empty token pair", secondTokens)
+	}
+}
+
+func TestRefreshRejectsUnknownToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{refreshSessions: make(map[string]RefreshSession)}
+	service := newTestService(repository)
+
+	tokens, err := service.Refresh(
+		context.Background(),
+		RefreshParams{RefreshToken: "unknown-refresh-token"},
+	)
+	if !errors.Is(err, ErrRefreshTokenNotFound) {
+		t.Fatalf("Refresh() error = %v, want %v", err, ErrRefreshTokenNotFound)
+	}
+	if tokens != (TokenPair{}) || repository.rotateCalled {
+		t.Fatalf("tokens = %#v, rotate called = %t", tokens, repository.rotateCalled)
+	}
+}
+
+func TestRefreshRejectsExpiredToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{
+		refreshSession: RefreshSession{
+			UserID:    uuid.New(),
+			ExpiresAt: time.Now().Add(-time.Minute),
+		},
+	}
+	service := newTestService(repository)
+
+	tokens, err := service.Refresh(
+		context.Background(),
+		RefreshParams{RefreshToken: "expired-refresh-token"},
+	)
+	if !errors.Is(err, ErrRefreshTokenExpired) {
+		t.Fatalf("Refresh() error = %v, want %v", err, ErrRefreshTokenExpired)
+	}
+	if tokens != (TokenPair{}) || repository.rotateCalled {
+		t.Fatalf("tokens = %#v, rotate called = %t", tokens, repository.rotateCalled)
+	}
+}
+
+func TestRefreshWrapsRepositoryFailure(t *testing.T) {
+	t.Parallel()
+
+	repositoryError := errors.New("database unavailable")
+	repository := &stubRepository{getRefreshErr: repositoryError}
+	service := newTestService(repository)
+
+	_, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: "refresh-token"})
+	if !errors.Is(err, repositoryError) {
+		t.Fatalf("Refresh() error = %v, want wrapped %v", err, repositoryError)
 	}
 }
 

@@ -1,6 +1,10 @@
 package auth
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type RegisterParams struct {
 	Name         *string
@@ -9,8 +13,12 @@ type RegisterParams struct {
 	PasswordHash string
 }
 type LoginParams struct {
-	Email        string
+	Email    string
 	Password string
+}
+
+type RefreshParams struct {
+	RefreshToken string
 }
 type TokenPair struct {
 	AccessToken  string
@@ -20,4 +28,9 @@ type UserCredentials struct {
 	ID           uuid.UUID
 	Email        string
 	PasswordHash string
+}
+
+type RefreshSession struct {
+	UserID    uuid.UUID
+	ExpiresAt time.Time
 }

@@ -21,6 +21,14 @@ type Repository interface {
 		refreshTokenHash string,
 		refreshExpiresAt time.Time,
 	) error
+	GetRefreshSessionByTokenHash(ctx context.Context, tokenHash string) (RefreshSession, error)
+	RotateRefreshSession(
+		ctx context.Context,
+		oldTokenHash string,
+		userID uuid.UUID,
+		newTokenHash string,
+		newExpiresAt time.Time,
+	) error
 	// Logout(ctx context.Context, id uuid.UUID) error
 }
 
@@ -143,7 +151,84 @@ func (r *PostgresRepository) CreateRefreshSession(
 	}
 
 	if tag.RowsAffected() != 1 {
-    return errors.New("insert refresh session: unexpected row count")
+		return errors.New("insert refresh session: unexpected row count")
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) GetRefreshSessionByTokenHash(
+	ctx context.Context,
+	tokenHash string,
+) (RefreshSession, error) {
+	var session RefreshSession
+
+	err := r.pool.QueryRow(
+		ctx,
+		`
+		SELECT user_id, expires_at
+		FROM auth_refresh_tokens
+		WHERE token_hash = $1
+		`,
+		tokenHash,
+	).Scan(&session.UserID, &session.ExpiresAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RefreshSession{}, ErrRefreshTokenNotFound
+		}
+
+		return RefreshSession{}, fmt.Errorf("get refresh session by token hash: %w", err)
+	}
+
+	return session, nil
+}
+
+func (r *PostgresRepository) RotateRefreshSession(
+	ctx context.Context,
+	oldTokenHash string,
+	userID uuid.UUID,
+	newTokenHash string,
+	newExpiresAt time.Time,
+) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin refresh rotation transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	tag, err := tx.Exec(
+		ctx,
+		`DELETE FROM auth_refresh_tokens WHERE token_hash = $1`,
+		oldTokenHash,
+	)
+	if err != nil {
+		return fmt.Errorf("delete rotated refresh session: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrRefreshTokenNotFound
+	}
+
+	tag, err = tx.Exec(
+		ctx,
+		`
+		INSERT INTO auth_refresh_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3)
+		`,
+		userID,
+		newTokenHash,
+		newExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert rotated refresh session: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return errors.New("insert rotated refresh session: unexpected row count")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit refresh rotation transaction: %w", err)
 	}
 
 	return nil

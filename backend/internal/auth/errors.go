@@ -21,4 +21,7 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 	ErrInvalidToken = errors.New("invalid token")
 	ErrExpiredToken = errors.New("expired token")
+
+	ErrRefreshTokenNotFound = errors.New("refresh token not found")
+	ErrRefreshTokenExpired  = errors.New("refresh token expired")
 )

@@ -48,6 +48,18 @@ func mapError(err error) httpx.MappedError {
 			Code:    "INVALID_CREDENTIALS",
 			Message: "invalid credentials",
 		}
+	case errors.Is(err, ErrRefreshTokenNotFound):
+		return httpx.MappedError{
+			Status:  http.StatusUnauthorized,
+			Code:    "INVALID_REFRESH_TOKEN",
+			Message: "invalid refresh token",
+		}
+	case errors.Is(err, ErrRefreshTokenExpired):
+		return httpx.MappedError{
+			Status:  http.StatusUnauthorized,
+			Code:    "REFRESH_TOKEN_EXPIRED",
+			Message: "refresh token expired",
+		}
 	case errors.Is(err, ErrInvalidEmail):
 		return httpx.MappedError{
 			Status:  http.StatusBadRequest,

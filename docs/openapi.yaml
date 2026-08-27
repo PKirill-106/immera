@@ -130,7 +130,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponse'
+                $ref: '#/components/schemas/TokenPairResponse'
               example:
                 access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example
                 refresh_token: 3fGQ7YVj2A4nP9xK8mL1sT6uW0cR5bHqE7dN2zJ4iXs
@@ -138,6 +138,31 @@ paths:
           $ref: '#/components/responses/LoginBadRequest'
         '401':
           $ref: '#/components/responses/LoginUnauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Rotate a refresh token and issue a new token pair
+      operationId: refreshTokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token rotation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairResponse'
+        '400':
+          $ref: '#/components/responses/RefreshBadRequest'
+        '401':
+          $ref: '#/components/responses/RefreshUnauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -259,7 +284,18 @@ components:
           type: string
           format: password
 
-    LoginResponse:
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+          description: Opaque refresh token returned by login or token refresh
+
+    TokenPairResponse:
       type: object
       additionalProperties: false
       required:
@@ -373,6 +409,35 @@ components:
             error:
               code: INVALID_CREDENTIALS
               message: invalid credentials
+    RefreshBadRequest:
+      description: The refresh request body or token is empty or malformed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: invalid request
+    RefreshUnauthorized:
+      description: The refresh token is unknown or expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRefreshToken:
+              summary: Refresh token is unknown or was already rotated
+              value:
+                error:
+                  code: INVALID_REFRESH_TOKEN
+                  message: invalid refresh token
+            expiredRefreshToken:
+              summary: Refresh token has expired
+              value:
+                error:
+                  code: REFRESH_TOKEN_EXPIRED
+                  message: refresh token expired
     InvalidUserID:
       description: The user ID is not a valid non-zero UUID
       content:

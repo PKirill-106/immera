@@ -39,6 +39,20 @@ func TestMapError(t *testing.T) {
 			message: "invalid credentials",
 		},
 		{
+			name:    "unknown refresh token",
+			err:     ErrRefreshTokenNotFound,
+			status:  http.StatusUnauthorized,
+			code:    "INVALID_REFRESH_TOKEN",
+			message: "invalid refresh token",
+		},
+		{
+			name:    "expired refresh token",
+			err:     ErrRefreshTokenExpired,
+			status:  http.StatusUnauthorized,
+			code:    "REFRESH_TOKEN_EXPIRED",
+			message: "refresh token expired",
+		},
+		{
 			name:    "invalid email",
 			err:     ErrInvalidEmail,
 			status:  http.StatusBadRequest,

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	// "github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 type authService interface {
 	Register(ctx context.Context, registration RegisterDTO) error
 	Login(ctx context.Context, params LoginParams) (TokenPair, error)
+	Refresh(ctx context.Context, params RefreshParams) (TokenPair, error)
 	// Logout(ctx context.Context, id uuid.UUID) error
 	// RefreshToken(ctx context.Context, token string) (string, error)
 }
@@ -34,6 +36,7 @@ func NewHandler(service authService, log *slog.Logger) *Handler {
 func (h *Handler) Routes(router chi.Router) {
 	router.Post("/auth/register", h.Register)
 	router.Post("/auth/login", h.Login)
+	router.Post("/auth/refresh", h.Refresh)
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +91,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := loginResponseDTO{
+	response := tokenPairResponseDTO{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 	}
@@ -98,5 +101,37 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			"failed to write login response",
 			"error", err,
 		)
+	}
+}
+
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequestDTO
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode refresh request")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode refresh request")
+		return
+	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		h.writeMappedError(w, ErrInvalidRequest, "empty refresh token")
+		return
+	}
+
+	tokens, err := h.service.Refresh(r.Context(), RefreshParams{RefreshToken: req.RefreshToken})
+	if err != nil {
+		h.writeMappedError(w, err, "failed to refresh tokens")
+		return
+	}
+
+	if err := httpx.WriteJSON(w, http.StatusOK, tokenPairResponseDTO{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	}); err != nil {
+		h.log.Error("failed to write refresh response", "error", err)
 	}
 }

@@ -20,8 +20,12 @@ type stubAuthService struct {
 	registerCalled bool
 	loginErr       error
 	loginParams    LoginParams
-	tokens         TokenPair
+	loginTokens    TokenPair
 	loginCalled    bool
+	refreshErr     error
+	refreshParams  RefreshParams
+	refreshTokens  TokenPair
+	refreshCalled  bool
 }
 
 func (s *stubAuthService) Register(_ context.Context, registration RegisterDTO) error {
@@ -33,7 +37,13 @@ func (s *stubAuthService) Register(_ context.Context, registration RegisterDTO) 
 func (s *stubAuthService) Login(_ context.Context, params LoginParams) (TokenPair, error) {
 	s.loginCalled = true
 	s.loginParams = params
-	return s.tokens, s.loginErr
+	return s.loginTokens, s.loginErr
+}
+
+func (s *stubAuthService) Refresh(_ context.Context, params RefreshParams) (TokenPair, error) {
+	s.refreshCalled = true
+	s.refreshParams = params
+	return s.refreshTokens, s.refreshErr
 }
 
 func TestRegisterRejectsInvalidRequestBody(t *testing.T) {
@@ -183,7 +193,7 @@ func TestLoginReturnsTokenPair(t *testing.T) {
 	t.Parallel()
 
 	service := &stubAuthService{
-		tokens: TokenPair{
+		loginTokens: TokenPair{
 			AccessToken:  "access-token",
 			RefreshToken: "refresh-token",
 		},
@@ -211,12 +221,63 @@ func TestLoginReturnsTokenPair(t *testing.T) {
 		t.Fatalf("login params = %#v, want submitted credentials", service.loginParams)
 	}
 
-	var body loginResponseDTO
+	var body tokenPairResponseDTO
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if body.AccessToken != "access-token" || body.RefreshToken != "refresh-token" {
 		t.Fatalf("response = %#v, want returned token pair", body)
+	}
+}
+
+func TestRefreshRejectsEmptyToken(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(http.MethodPost, "/auth/refresh", strings.NewReader(`{"refresh_token":""}`))
+	response := httptest.NewRecorder()
+
+	handler.Refresh(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	if service.refreshCalled {
+		t.Fatal("service was called for an empty refresh token")
+	}
+	assertErrorResponse(t, response, "INVALID_REQUEST", "invalid request")
+}
+
+func TestRefreshReturnsRotatedTokenPair(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{
+		refreshTokens: TokenPair{AccessToken: "new-access", RefreshToken: "new-refresh"},
+	}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/refresh",
+		strings.NewReader(`{"refresh_token":"old-refresh"}`),
+	)
+	response := httptest.NewRecorder()
+
+	handler.Refresh(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if service.refreshParams.RefreshToken != "old-refresh" {
+		t.Fatalf("refresh token = %q, want old-refresh", service.refreshParams.RefreshToken)
+	}
+
+	var body tokenPairResponseDTO
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.AccessToken != "new-access" || body.RefreshToken != "new-refresh" {
+		t.Fatalf("response = %#v, want rotated token pair", body)
 	}
 }
 

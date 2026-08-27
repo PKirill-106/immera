@@ -11,7 +11,11 @@ type loginRequestDTO struct {
 	Password string `json:"password"`
 }
 
-type loginResponseDTO struct {
+type refreshRequestDTO struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type tokenPairResponseDTO struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }

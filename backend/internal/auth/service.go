@@ -136,3 +136,54 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (TokenPair, err
 		RefreshToken: refreshToken,
 	}, nil
 }
+
+func (s *Service) Refresh(ctx context.Context, params RefreshParams) (TokenPair, error) {
+	if strings.TrimSpace(params.RefreshToken) == "" {
+		return TokenPair{}, ErrInvalidRequest
+	}
+
+	oldTokenHash := hashRefreshToken(params.RefreshToken)
+	session, err := s.repo.GetRefreshSessionByTokenHash(ctx, oldTokenHash)
+	if err != nil {
+		if errors.Is(err, ErrRefreshTokenNotFound) {
+			return TokenPair{}, ErrRefreshTokenNotFound
+		}
+
+		return TokenPair{}, fmt.Errorf("refresh: get refresh session: %w", err)
+	}
+
+	if !time.Now().Before(session.ExpiresAt) {
+		return TokenPair{}, ErrRefreshTokenExpired
+	}
+
+	accessToken, err := generateAccessToken(session.UserID, s.jwtSecret, s.accessTTL)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("refresh: generate access token: %w", err)
+	}
+
+	newRefreshToken, err := generateRefreshToken()
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("refresh: generate refresh token: %w", err)
+	}
+
+	newRefreshTokenHash := hashRefreshToken(newRefreshToken)
+	err = s.repo.RotateRefreshSession(
+		ctx,
+		oldTokenHash,
+		session.UserID,
+		newRefreshTokenHash,
+		time.Now().Add(s.refreshTTL),
+	)
+	if err != nil {
+		if errors.Is(err, ErrRefreshTokenNotFound) {
+			return TokenPair{}, ErrRefreshTokenNotFound
+		}
+
+		return TokenPair{}, fmt.Errorf("refresh: rotate refresh session: %w", err)
+	}
+
+	return TokenPair{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
+}
