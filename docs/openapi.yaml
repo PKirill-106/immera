@@ -109,6 +109,37 @@ paths:
           $ref: '#/components/responses/RegisterConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in with email and password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: jane@example.com
+              password: password1!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example
+                refresh_token: 3fGQ7YVj2A4nP9xK8mL1sT6uW0cR5bHqE7dN2zJ4iXs
+        '400':
+          $ref: '#/components/responses/LoginBadRequest'
+        '401':
+          $ref: '#/components/responses/LoginUnauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   schemas:
@@ -213,6 +244,35 @@ components:
           maxLength: 40
           description: Must contain at least one number and one punctuation or symbol character, and must not exceed 72 UTF-8 bytes
 
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 50
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - access_token
+        - refresh_token
+      properties:
+        access_token:
+          type: string
+          description: Short-lived JWT access token
+        refresh_token:
+          type: string
+          description: Opaque token used to obtain a new access token
+
     AuthUser:
       type: object
       required:
@@ -293,6 +353,26 @@ components:
                 error:
                   code: PHONE_NUMBER_ALREADY_EXISTS
                   message: phone number already exists
+    LoginBadRequest:
+      description: The login request body is malformed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: invalid request
+    LoginUnauthorized:
+      description: The email or password is incorrect
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_CREDENTIALS
+              message: invalid credentials
     InvalidUserID:
       description: The user ID is not a valid non-zero UUID
       content:

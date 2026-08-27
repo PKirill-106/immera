@@ -15,15 +15,25 @@ import (
 )
 
 type stubAuthService struct {
-	registerErr error
-	registered  RegisterDTO
-	called      bool
+	registerErr    error
+	registered     RegisterDTO
+	registerCalled bool
+	loginErr       error
+	loginParams    LoginParams
+	tokens         TokenPair
+	loginCalled    bool
 }
 
 func (s *stubAuthService) Register(_ context.Context, registration RegisterDTO) error {
-	s.called = true
+	s.registerCalled = true
 	s.registered = registration
 	return s.registerErr
+}
+
+func (s *stubAuthService) Login(_ context.Context, params LoginParams) (TokenPair, error) {
+	s.loginCalled = true
+	s.loginParams = params
+	return s.tokens, s.loginErr
 }
 
 func TestRegisterRejectsInvalidRequestBody(t *testing.T) {
@@ -52,7 +62,7 @@ func TestRegisterRejectsInvalidRequestBody(t *testing.T) {
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 			}
-			if service.called {
+			if service.registerCalled {
 				t.Fatal("service was called for an invalid request body")
 			}
 
@@ -103,7 +113,7 @@ func TestRegisterReturnsCreatedWithoutBody(t *testing.T) {
 	if response.Body.Len() != 0 {
 		t.Fatalf("body = %q, want empty body", response.Body.String())
 	}
-	if !service.called {
+	if !service.registerCalled {
 		t.Fatal("service was not called")
 	}
 	if service.registered.Name == nil || *service.registered.Name != "Jane" {
@@ -111,6 +121,102 @@ func TestRegisterReturnsCreatedWithoutBody(t *testing.T) {
 	}
 	if service.registered.PhoneNumber == nil || *service.registered.PhoneNumber != "+48123456789" {
 		t.Fatalf("registered phone number = %v, want +48123456789", service.registered.PhoneNumber)
+	}
+}
+
+func TestLoginRejectsInvalidRequestBody(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"email":`},
+		{name: "unknown field", body: `{"email":"jane@example.com","password":"password1!","unknown":true}`},
+		{name: "multiple JSON values", body: `{"email":"jane@example.com","password":"password1!"} {}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			service := &stubAuthService{}
+			handler := newTestHandler(service)
+			request := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(tt.body))
+			response := httptest.NewRecorder()
+
+			handler.Login(response, request)
+
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+			}
+			if service.loginCalled {
+				t.Fatal("service was called for an invalid request body")
+			}
+
+			assertErrorResponse(t, response, "INVALID_REQUEST", "invalid request")
+		})
+	}
+}
+
+func TestLoginMapsInvalidCredentials(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{loginErr: ErrInvalidCredentials}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/login",
+		strings.NewReader(`{"email":"jane@example.com","password":"wrong-password"}`),
+	)
+	response := httptest.NewRecorder()
+
+	handler.Login(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+	assertErrorResponse(t, response, "INVALID_CREDENTIALS", "invalid credentials")
+}
+
+func TestLoginReturnsTokenPair(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{
+		tokens: TokenPair{
+			AccessToken:  "access-token",
+			RefreshToken: "refresh-token",
+		},
+	}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/login",
+		strings.NewReader(`{"email":"jane@example.com","password":"password1!"}`),
+	)
+	response := httptest.NewRecorder()
+
+	handler.Login(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", contentType)
+	}
+	if !service.loginCalled {
+		t.Fatal("service was not called")
+	}
+	if service.loginParams.Email != "jane@example.com" || service.loginParams.Password != "password1!" {
+		t.Fatalf("login params = %#v, want submitted credentials", service.loginParams)
+	}
+
+	var body loginResponseDTO
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.AccessToken != "access-token" || body.RefreshToken != "refresh-token" {
+		t.Fatalf("response = %#v, want returned token pair", body)
 	}
 }
 
