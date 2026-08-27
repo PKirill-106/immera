@@ -13,23 +13,29 @@ import (
 )
 
 type Service struct {
-	repo       Repository
-	jwtSecret  []byte
-	accessTTL  time.Duration
-	refreshTTL time.Duration
+	repo                 Repository
+	emailSender          EmailSender
+	jwtSecret            []byte
+	accessTTL            time.Duration
+	refreshTTL           time.Duration
+	emailVerificationTTL time.Duration
 }
 
 func NewService(
 	repo Repository,
+	emailSender EmailSender,
 	jwtSecret []byte,
 	accessTTL time.Duration,
 	refreshTTL time.Duration,
+	emailVerificationTTL time.Duration,
 ) *Service {
 	return &Service{
-		repo:       repo,
-		jwtSecret:  jwtSecret,
-		accessTTL:  accessTTL,
-		refreshTTL: refreshTTL,
+		repo:                 repo,
+		emailSender:          emailSender,
+		jwtSecret:            jwtSecret,
+		accessTTL:            accessTTL,
+		refreshTTL:           refreshTTL,
+		emailVerificationTTL: emailVerificationTTL,
 	}
 }
 
@@ -65,14 +71,25 @@ func (s *Service) Register(ctx context.Context, registration RegisterDTO) error 
 		return fmt.Errorf("hash password: %w", err)
 	}
 
+	verificationToken, err := generateVerificationToken()
+	if err != nil {
+		return fmt.Errorf("generate verification token: %w", err)
+	}
+
 	err = s.repo.Register(ctx, RegisterParams{
-		Name:         name,
-		Email:        parsedEmail.Address,
-		PhoneNumber:  phoneNumber,
-		PasswordHash: hash,
+		Name:                       name,
+		Email:                      parsedEmail.Address,
+		PhoneNumber:                phoneNumber,
+		PasswordHash:               hash,
+		VerificationTokenHash:      hashVerificationToken(verificationToken),
+		VerificationTokenExpiresAt: time.Now().Add(s.emailVerificationTTL),
 	})
 	if err != nil {
 		return fmt.Errorf("register user: %w", err)
+	}
+
+	if err := s.emailSender.SendVerificationEmail(ctx, parsedEmail.Address, verificationToken); err != nil {
+		return fmt.Errorf("send registration verification email: %w", err)
 	}
 
 	return nil

@@ -53,11 +53,14 @@ func run() error {
 	)
 
 	authRepository := auth.NewPostgresRepository(pool)
+	emailSender := auth.NewDevelopmentEmailSender(log)
 	authService := auth.NewService(
 		authRepository,
+		emailSender,
 		[]byte(cfg.Auth.JWTSecret),
 		cfg.Auth.AccessTokenTTL,
 		cfg.Auth.RefreshTokenTTL,
+		cfg.Auth.EmailVerificationTTL,
 	)
 	authHandler := auth.NewHandler(authService, log)
 

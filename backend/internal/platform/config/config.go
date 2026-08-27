@@ -34,9 +34,10 @@ type Database struct {
 	ConnectTimeout  time.Duration
 }
 type AuthConfig struct {
-	JWTSecret       string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
+	JWTSecret            string
+	AccessTokenTTL       time.Duration
+	RefreshTokenTTL      time.Duration
+	EmailVerificationTTL time.Duration
 }
 
 func Load() (Config, error) {
@@ -99,6 +100,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.Auth.RefreshTokenTTL, err = duration("REFRESH_TOKEN_TTL", 720*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.Auth.EmailVerificationTTL, err = duration("EMAIL_VERIFICATION_TTL", 24*time.Hour); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

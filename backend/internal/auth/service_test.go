@@ -126,6 +126,24 @@ func (r *stubRepository) DeleteRefreshSessionByTokenHash(
 	return nil
 }
 
+type stubEmailSender struct {
+	email  string
+	token  string
+	called bool
+	err    error
+}
+
+func (s *stubEmailSender) SendVerificationEmail(
+	_ context.Context,
+	email string,
+	token string,
+) error {
+	s.called = true
+	s.email = email
+	s.token = token
+	return s.err
+}
+
 func TestRegisterNormalizesAndHashesInput(t *testing.T) {
 	t.Parallel()
 
@@ -414,6 +432,42 @@ func TestLoginReturnsRefreshSessionErrorWithoutTokens(t *testing.T) {
 	}
 }
 
+func TestRegisterCreatesAndSendsVerificationToken(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{}
+	sender := &stubEmailSender{}
+	service := newTestServiceWithSender(repository, sender)
+	beforeExpiry := time.Now().Add(testEmailVerificationTTL)
+
+	err := service.Register(context.Background(), RegisterDTO{
+		Email:    "jane@example.com",
+		Password: "password1!",
+	})
+	afterExpiry := time.Now().Add(testEmailVerificationTTL)
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if !sender.called || sender.email != "jane@example.com" || sender.token == "" {
+		t.Fatalf("verification email = %#v, want jane@example.com with a token", sender)
+	}
+	if repository.registered.VerificationTokenHash != hashVerificationToken(sender.token) {
+		t.Fatal("stored verification hash does not match the emailed token")
+	}
+	if repository.registered.VerificationTokenHash == sender.token {
+		t.Fatal("repository received the raw verification token")
+	}
+	if repository.registered.VerificationTokenExpiresAt.Before(beforeExpiry) ||
+		repository.registered.VerificationTokenExpiresAt.After(afterExpiry) {
+		t.Fatalf(
+			"verification expiry = %v, want between %v and %v",
+			repository.registered.VerificationTokenExpiresAt,
+			beforeExpiry,
+			afterExpiry,
+		)
+	}
+}
+
 func TestRefreshRotatesTokenAndInvalidatesOldToken(t *testing.T) {
 	t.Parallel()
 
@@ -550,14 +604,26 @@ func TestLogoutUnknownTokenIsIdempotent(t *testing.T) {
 }
 
 const (
-	testAccessTTL  = 15 * time.Minute
-	testRefreshTTL = 24 * time.Hour
+	testAccessTTL            = 15 * time.Minute
+	testRefreshTTL           = 24 * time.Hour
+	testEmailVerificationTTL = 2 * time.Hour
 )
 
 var testJWTSecret = []byte("test-secret-that-is-at-least-32-bytes")
 
 func newTestService(repository Repository) *Service {
-	return NewService(repository, testJWTSecret, testAccessTTL, testRefreshTTL)
+	return newTestServiceWithSender(repository, &stubEmailSender{})
+}
+
+func newTestServiceWithSender(repository Repository, sender EmailSender) *Service {
+	return NewService(
+		repository,
+		sender,
+		testJWTSecret,
+		testAccessTTL,
+		testRefreshTTL,
+		testEmailVerificationTTL,
+	)
 }
 
 func stringPointer(value string) *string {

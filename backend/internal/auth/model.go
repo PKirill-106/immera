@@ -7,10 +7,12 @@ import (
 )
 
 type RegisterParams struct {
-	Name         *string
-	Email        string
-	PhoneNumber  *string
-	PasswordHash string
+	Name                       *string
+	Email                      string
+	PhoneNumber                *string
+	PasswordHash               string
+	VerificationTokenHash      string
+	VerificationTokenExpiresAt time.Time
 }
 type LoginParams struct {
 	Email    string

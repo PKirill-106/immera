@@ -91,6 +91,28 @@ func (r *PostgresRepository) Register(ctx context.Context, registration Register
 		return errors.New("insert default user settings: unexpected row count")
 	}
 
+	tag, err = tx.Exec(
+		ctx,
+		`
+		INSERT INTO email_verification_tokens (
+			user_id,
+			token_hash,
+			expires_at
+		)
+		VALUES ($1, $2, $3)
+		`,
+		userID,
+		registration.VerificationTokenHash,
+		registration.VerificationTokenExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert email verification token: %w", err)
+	}
+
+	if tag.RowsAffected() != 1 {
+		return errors.New("insert email verification token: unexpected row count")
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit registration transaction: %w", err)
 	}

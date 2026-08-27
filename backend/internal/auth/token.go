@@ -40,6 +40,14 @@ func generateAccessToken(
 }
 
 func generateRefreshToken() (string, error) {
+	return generateOpaqueToken()
+}
+
+func generateVerificationToken() (string, error) {
+	return generateOpaqueToken()
+}
+
+func generateOpaqueToken() (string, error) {
 	bytes := make([]byte, 32)
 
 	_, err := rand.Read(bytes)
@@ -54,6 +62,14 @@ func generateRefreshToken() (string, error) {
 }
 
 func hashRefreshToken(token string) string {
+	return hashOpaqueToken(token)
+}
+
+func hashVerificationToken(token string) string {
+	return hashOpaqueToken(token)
+}
+
+func hashOpaqueToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 
 	return hex.EncodeToString(sum[:])
