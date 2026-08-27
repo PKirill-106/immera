@@ -14,6 +14,7 @@ type RegisterParams struct {
 	VerificationTokenHash      string
 	VerificationTokenExpiresAt time.Time
 }
+
 type LoginParams struct {
 	Email    string
 	Password string
@@ -26,10 +27,20 @@ type RefreshParams struct {
 type LogoutParams struct {
 	RefreshToken string
 }
+
+type VerifyEmailParams struct {
+	Token string
+}
+
+type ResendVerificationParams struct {
+	Email string
+}
+
 type TokenPair struct {
 	AccessToken  string
 	RefreshToken string
 }
+
 type UserCredentials struct {
 	ID           uuid.UUID
 	Email        string
@@ -39,4 +50,17 @@ type UserCredentials struct {
 type RefreshSession struct {
 	UserID    uuid.UUID
 	ExpiresAt time.Time
+}
+
+type EmailVerification struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
+type UserVerificationStatus struct {
+	ID              uuid.UUID
+	Email           string
+	EmailVerifiedAt *time.Time
 }

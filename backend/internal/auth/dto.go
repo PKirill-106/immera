@@ -6,6 +6,7 @@ type RegisterDTO struct {
 	PhoneNumber *string `json:"phone_number"`
 	Password    string  `json:"password"`
 }
+
 type loginRequestDTO struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -17,6 +18,14 @@ type refreshRequestDTO struct {
 
 type logoutRequestDTO struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+type verifyEmailRequestDTO struct {
+	Token string `json:"token"`
+}
+
+type resendVerificationRequestDTO struct {
+	Email string `json:"email"`
 }
 
 type tokenPairResponseDTO struct {

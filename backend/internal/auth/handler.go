@@ -3,14 +3,14 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"immera/internal/platform/httpx"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"immera/internal/platform/httpx"
+
 	"github.com/go-chi/chi/v5"
-	// "github.com/google/uuid"
 )
 
 type authService interface {
@@ -18,8 +18,8 @@ type authService interface {
 	Login(ctx context.Context, params LoginParams) (TokenPair, error)
 	Refresh(ctx context.Context, params RefreshParams) (TokenPair, error)
 	Logout(ctx context.Context, params LogoutParams) error
-	// Logout(ctx context.Context, id uuid.UUID) error
-	// RefreshToken(ctx context.Context, token string) (string, error)
+	VerifyEmail(ctx context.Context, params VerifyEmailParams) error
+	ResendVerification(ctx context.Context, params ResendVerificationParams) error
 }
 
 type Handler struct {
@@ -39,6 +39,8 @@ func (h *Handler) Routes(router chi.Router) {
 	router.Post("/auth/login", h.Login)
 	router.Post("/auth/refresh", h.Refresh)
 	router.Post("/auth/logout", h.Logout)
+	router.Post("/auth/verify-email", h.VerifyEmail)
+	router.Post("/auth/resend-verification", h.ResendVerification)
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +160,57 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.Logout(r.Context(), LogoutParams{RefreshToken: req.RefreshToken}); err != nil {
 		h.writeMappedError(w, err, "failed to logout user")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req verifyEmailRequestDTO
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode verify email request")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode verify email request")
+		return
+	}
+	if strings.TrimSpace(req.Token) == "" {
+		h.writeMappedError(w, ErrInvalidRequest, "empty email verification token")
+		return
+	}
+
+	if err := h.service.VerifyEmail(r.Context(), VerifyEmailParams{Token: req.Token}); err != nil {
+		h.writeMappedError(w, err, "failed to verify email")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
+	var req resendVerificationRequestDTO
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode resend verification request")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode resend verification request")
+		return
+	}
+
+	if err := h.service.ResendVerification(
+		r.Context(),
+		ResendVerificationParams{Email: req.Email},
+	); err != nil {
+		h.writeMappedError(w, err, "failed to resend verification email")
 		return
 	}
 

@@ -184,6 +184,52 @@ paths:
           $ref: '#/components/responses/LogoutBadRequest'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /auth/verify-email:
+    post:
+      tags:
+        - Auth
+      summary: Verify a user's email address
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: Email verified successfully
+        '400':
+          $ref: '#/components/responses/VerifyEmailBadRequest'
+        '404':
+          $ref: '#/components/responses/VerificationTokenNotFound'
+        '409':
+          $ref: '#/components/responses/VerificationConflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /auth/resend-verification:
+    post:
+      tags:
+        - Auth
+      summary: Replace and resend an email-verification token
+      operationId: resendVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+      responses:
+        '204':
+          description: A new verification token was created and sent
+        '400':
+          $ref: '#/components/responses/ResendVerificationBadRequest'
+        '404':
+          $ref: '#/components/responses/ResendVerificationNotFound'
+        '409':
+          $ref: '#/components/responses/EmailAlreadyVerified'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   schemas:
@@ -313,6 +359,28 @@ components:
           type: string
           minLength: 1
           description: Opaque refresh token returned by login or token refresh
+
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          minLength: 1
+          description: Opaque email-verification token
+
+    ResendVerificationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 50
 
     TokenPairResponse:
       type: object
@@ -467,6 +535,93 @@ components:
             error:
               code: INVALID_REQUEST
               message: invalid request
+    VerifyEmailBadRequest:
+      description: The request is malformed or the verification token has expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Missing or malformed token
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            expiredToken:
+              summary: Verification token has expired
+              value:
+                error:
+                  code: VERIFICATION_TOKEN_EXPIRED
+                  message: verification token expired
+    VerificationTokenNotFound:
+      description: No email-verification record exists for the token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: VERIFICATION_TOKEN_NOT_FOUND
+              message: verification token not found
+    VerificationConflict:
+      description: The verification token was already used or the email is already verified
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            tokenUsed:
+              summary: Verification token was already used
+              value:
+                error:
+                  code: VERIFICATION_TOKEN_USED
+                  message: verification token already used
+            emailAlreadyVerified:
+              summary: The user's email was already verified
+              value:
+                error:
+                  code: EMAIL_ALREADY_VERIFIED
+                  message: email already verified
+    ResendVerificationBadRequest:
+      description: The resend request body or email address is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Malformed request body
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            invalidEmail:
+              summary: Invalid email address
+              value:
+                error:
+                  code: INVALID_EMAIL
+                  message: invalid email
+    ResendVerificationNotFound:
+      description: No user exists with the supplied email address
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: USER_NOT_FOUND
+              message: user not found
+    EmailAlreadyVerified:
+      description: The user's email address is already verified
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: EMAIL_ALREADY_VERIFIED
+              message: email already verified
     InvalidUserID:
       description: The user ID is not a valid non-zero UUID
       content:

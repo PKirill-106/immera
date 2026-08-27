@@ -219,3 +219,86 @@ func (s *Service) Logout(ctx context.Context, params LogoutParams) error {
 
 	return nil
 }
+
+func (s *Service) VerifyEmail(ctx context.Context, params VerifyEmailParams) error {
+	if strings.TrimSpace(params.Token) == "" {
+		return ErrInvalidRequest
+	}
+
+	verification, err := s.repo.GetEmailVerificationByTokenHash(
+		ctx,
+		hashVerificationToken(params.Token),
+	)
+	if err != nil {
+		if errors.Is(err, ErrVerificationTokenNotFound) {
+			return ErrVerificationTokenNotFound
+		}
+
+		return fmt.Errorf("verify email: get verification token: %w", err)
+	}
+
+	if verification.UsedAt != nil {
+		return ErrVerificationTokenUsed
+	}
+	if !time.Now().Before(verification.ExpiresAt) {
+		return ErrVerificationTokenExpired
+	}
+
+	if err := s.repo.VerifyEmail(
+		ctx,
+		verification.ID,
+		verification.UserID,
+		time.Now(),
+	); err != nil {
+		if errors.Is(err, ErrVerificationTokenUsed) || errors.Is(err, ErrEmailAlreadyVerified) {
+			return err
+		}
+
+		return fmt.Errorf("verify email: persist verification: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) ResendVerification(
+	ctx context.Context,
+	params ResendVerificationParams,
+) error {
+	email := strings.ToLower(strings.TrimSpace(params.Email))
+	parsedEmail, err := mail.ParseAddress(email)
+	if err != nil || parsedEmail.Address != email || utf8.RuneCountInString(email) > 50 {
+		return ErrInvalidEmail
+	}
+
+	status, err := s.repo.GetUserVerificationStatusByEmail(ctx, parsedEmail.Address)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return ErrUserNotFound
+		}
+
+		return fmt.Errorf("resend verification: get user status: %w", err)
+	}
+	if status.EmailVerifiedAt != nil {
+		return ErrEmailAlreadyVerified
+	}
+
+	verificationToken, err := generateVerificationToken()
+	if err != nil {
+		return fmt.Errorf("resend verification: generate token: %w", err)
+	}
+
+	if err := s.repo.ReplaceEmailVerificationToken(
+		ctx,
+		status.ID,
+		hashVerificationToken(verificationToken),
+		time.Now().Add(s.emailVerificationTTL),
+	); err != nil {
+		return fmt.Errorf("resend verification: replace token: %w", err)
+	}
+
+	if err := s.emailSender.SendVerificationEmail(ctx, status.Email, verificationToken); err != nil {
+		return fmt.Errorf("resend verification: send email: %w", err)
+	}
+
+	return nil
+}

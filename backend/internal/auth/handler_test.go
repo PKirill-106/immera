@@ -15,20 +15,26 @@ import (
 )
 
 type stubAuthService struct {
-	registerErr    error
-	registered     RegisterDTO
-	registerCalled bool
-	loginErr       error
-	loginParams    LoginParams
-	loginTokens    TokenPair
-	loginCalled    bool
-	refreshErr     error
-	refreshParams  RefreshParams
-	refreshTokens  TokenPair
-	refreshCalled  bool
-	logoutErr      error
-	logoutParams   LogoutParams
-	logoutCalled   bool
+	registerErr              error
+	registered               RegisterDTO
+	registerCalled           bool
+	loginErr                 error
+	loginParams              LoginParams
+	loginTokens              TokenPair
+	loginCalled              bool
+	refreshErr               error
+	refreshParams            RefreshParams
+	refreshTokens            TokenPair
+	refreshCalled            bool
+	logoutErr                error
+	logoutParams             LogoutParams
+	logoutCalled             bool
+	verifyEmailErr           error
+	verifyEmailParams        VerifyEmailParams
+	verifyEmailCalled        bool
+	resendVerificationErr    error
+	resendVerificationParams ResendVerificationParams
+	resendVerificationCalled bool
 }
 
 func (s *stubAuthService) Register(_ context.Context, registration RegisterDTO) error {
@@ -53,6 +59,21 @@ func (s *stubAuthService) Logout(_ context.Context, params LogoutParams) error {
 	s.logoutCalled = true
 	s.logoutParams = params
 	return s.logoutErr
+}
+
+func (s *stubAuthService) VerifyEmail(_ context.Context, params VerifyEmailParams) error {
+	s.verifyEmailCalled = true
+	s.verifyEmailParams = params
+	return s.verifyEmailErr
+}
+
+func (s *stubAuthService) ResendVerification(
+	_ context.Context,
+	params ResendVerificationParams,
+) error {
+	s.resendVerificationCalled = true
+	s.resendVerificationParams = params
+	return s.resendVerificationErr
 }
 
 func TestRegisterRejectsInvalidRequestBody(t *testing.T) {
@@ -309,6 +330,50 @@ func TestLogoutReturnsNoContent(t *testing.T) {
 	}
 	if service.logoutParams.RefreshToken != "refresh-token" {
 		t.Fatalf("logout token = %q, want refresh-token", service.logoutParams.RefreshToken)
+	}
+}
+
+func TestVerifyEmailReturnsNoContent(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/verify-email",
+		strings.NewReader(`{"token":"verification-token"}`),
+	)
+	response := httptest.NewRecorder()
+
+	handler.VerifyEmail(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if service.verifyEmailParams.Token != "verification-token" {
+		t.Fatalf("verification token = %q, want verification-token", service.verifyEmailParams.Token)
+	}
+}
+
+func TestResendVerificationReturnsNoContent(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/resend-verification",
+		strings.NewReader(`{"email":"jane@example.com"}`),
+	)
+	response := httptest.NewRecorder()
+
+	handler.ResendVerification(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if service.resendVerificationParams.Email != "jane@example.com" {
+		t.Fatalf("resend email = %q, want jane@example.com", service.resendVerificationParams.Email)
 	}
 }
 

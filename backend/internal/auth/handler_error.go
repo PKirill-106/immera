@@ -60,6 +60,36 @@ func mapError(err error) httpx.MappedError {
 			Code:    "REFRESH_TOKEN_EXPIRED",
 			Message: "refresh token expired",
 		}
+	case errors.Is(err, ErrVerificationTokenNotFound):
+		return httpx.MappedError{
+			Status:  http.StatusNotFound,
+			Code:    "VERIFICATION_TOKEN_NOT_FOUND",
+			Message: "verification token not found",
+		}
+	case errors.Is(err, ErrVerificationTokenExpired):
+		return httpx.MappedError{
+			Status:  http.StatusBadRequest,
+			Code:    "VERIFICATION_TOKEN_EXPIRED",
+			Message: "verification token expired",
+		}
+	case errors.Is(err, ErrVerificationTokenUsed):
+		return httpx.MappedError{
+			Status:  http.StatusConflict,
+			Code:    "VERIFICATION_TOKEN_USED",
+			Message: "verification token already used",
+		}
+	case errors.Is(err, ErrEmailAlreadyVerified):
+		return httpx.MappedError{
+			Status:  http.StatusConflict,
+			Code:    "EMAIL_ALREADY_VERIFIED",
+			Message: "email already verified",
+		}
+	case errors.Is(err, ErrUserNotFound):
+		return httpx.MappedError{
+			Status:  http.StatusNotFound,
+			Code:    "USER_NOT_FOUND",
+			Message: "user not found",
+		}
 	case errors.Is(err, ErrInvalidEmail):
 		return httpx.MappedError{
 			Status:  http.StatusBadRequest,

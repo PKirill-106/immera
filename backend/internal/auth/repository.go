@@ -30,7 +30,20 @@ type Repository interface {
 		newExpiresAt time.Time,
 	) error
 	DeleteRefreshSessionByTokenHash(ctx context.Context, tokenHash string) error
-	// Logout(ctx context.Context, id uuid.UUID) error
+	GetEmailVerificationByTokenHash(ctx context.Context, tokenHash string) (EmailVerification, error)
+	VerifyEmail(
+		ctx context.Context,
+		verificationID uuid.UUID,
+		userID uuid.UUID,
+		verifiedAt time.Time,
+	) error
+	GetUserVerificationStatusByEmail(ctx context.Context, email string) (UserVerificationStatus, error)
+	ReplaceEmailVerificationToken(
+		ctx context.Context,
+		userID uuid.UUID,
+		tokenHash string,
+		expiresAt time.Time,
+	) error
 }
 
 type PostgresRepository struct {
@@ -118,7 +131,6 @@ func (r *PostgresRepository) Register(ctx context.Context, registration Register
 	}
 
 	return nil
-
 }
 
 func (r *PostgresRepository) GetCredentialsByEmail(ctx context.Context, email string) (UserCredentials, error) {
@@ -273,6 +285,160 @@ func (r *PostgresRepository) DeleteRefreshSessionByTokenHash(
 	return nil
 }
 
-// func (r *PostgresRepository) Logout(ctx context.Context, id uuid.UUID) error {}
+func (r *PostgresRepository) GetEmailVerificationByTokenHash(
+	ctx context.Context,
+	tokenHash string,
+) (EmailVerification, error) {
+	var verification EmailVerification
 
-// func (r *PostgresRepository) RefreshToken(ctx context.Context, token string) (string, error) {}
+	err := r.pool.QueryRow(
+		ctx,
+		`
+		SELECT id, user_id, expires_at, used_at
+		FROM email_verification_tokens
+		WHERE token_hash = $1
+		`,
+		tokenHash,
+	).Scan(
+		&verification.ID,
+		&verification.UserID,
+		&verification.ExpiresAt,
+		&verification.UsedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return EmailVerification{}, ErrVerificationTokenNotFound
+		}
+
+		return EmailVerification{}, fmt.Errorf("get email verification by token hash: %w", err)
+	}
+
+	return verification, nil
+}
+
+func (r *PostgresRepository) VerifyEmail(
+	ctx context.Context,
+	verificationID uuid.UUID,
+	userID uuid.UUID,
+	verifiedAt time.Time,
+) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin email verification transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	tag, err := tx.Exec(
+		ctx,
+		`
+		UPDATE email_verification_tokens
+		SET used_at = $2
+		WHERE id = $1 AND used_at IS NULL
+		`,
+		verificationID,
+		verifiedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("mark email verification token used: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrVerificationTokenUsed
+	}
+
+	tag, err = tx.Exec(
+		ctx,
+		`
+		UPDATE users
+		SET email_verified_at = $2, updated_at = $2
+		WHERE id = $1 AND email_verified_at IS NULL
+		`,
+		userID,
+		verifiedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("mark user email verified: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrEmailAlreadyVerified
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit email verification transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) GetUserVerificationStatusByEmail(
+	ctx context.Context,
+	email string,
+) (UserVerificationStatus, error) {
+	var status UserVerificationStatus
+
+	err := r.pool.QueryRow(
+		ctx,
+		`
+		SELECT id, email, email_verified_at
+		FROM users
+		WHERE email = $1
+		`,
+		email,
+	).Scan(&status.ID, &status.Email, &status.EmailVerifiedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return UserVerificationStatus{}, ErrUserNotFound
+		}
+
+		return UserVerificationStatus{}, fmt.Errorf("get user verification status by email: %w", err)
+	}
+
+	return status, nil
+}
+
+func (r *PostgresRepository) ReplaceEmailVerificationToken(
+	ctx context.Context,
+	userID uuid.UUID,
+	tokenHash string,
+	expiresAt time.Time,
+) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin replace verification token transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	if _, err := tx.Exec(
+		ctx,
+		`DELETE FROM email_verification_tokens WHERE user_id = $1 AND used_at IS NULL`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("delete active verification tokens: %w", err)
+	}
+
+	tag, err := tx.Exec(
+		ctx,
+		`
+		INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3)
+		`,
+		userID,
+		tokenHash,
+		expiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert replacement verification token: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return errors.New("insert replacement verification token: unexpected row count")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit replace verification token transaction: %w", err)
+	}
+
+	return nil
+}

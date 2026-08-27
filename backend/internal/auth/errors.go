@@ -22,6 +22,10 @@ var (
 	ErrInvalidToken = errors.New("invalid token")
 	ErrExpiredToken = errors.New("expired token")
 
-	ErrRefreshTokenNotFound = errors.New("refresh token not found")
-	ErrRefreshTokenExpired  = errors.New("refresh token expired")
+	ErrRefreshTokenNotFound      = errors.New("refresh token not found")
+	ErrRefreshTokenExpired       = errors.New("refresh token expired")
+	ErrVerificationTokenNotFound = errors.New("verification token not found")
+	ErrVerificationTokenExpired  = errors.New("verification token expired")
+	ErrVerificationTokenUsed     = errors.New("verification token already used")
+	ErrEmailAlreadyVerified      = errors.New("email already verified")
 )
