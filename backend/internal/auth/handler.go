@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"immera/internal/platform/httpx"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 
 type authService interface {
 	Register(ctx context.Context, registration RegisterDTO) error
-	// Login(ctx context.Context, credentials LoginDTO) (TokenPair, error)
+	Login(ctx context.Context, params LoginParams) (TokenPair, error)
 	// Logout(ctx context.Context, id uuid.UUID) error
 	// RefreshToken(ctx context.Context, token string) (string, error)
 }
@@ -32,6 +33,7 @@ func NewHandler(service authService, log *slog.Logger) *Handler {
 
 func (h *Handler) Routes(router chi.Router) {
 	router.Post("/auth/register", h.Register)
+	router.Post("/auth/login", h.Login)
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -56,4 +58,45 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req loginRequestDTO
+
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode login request")
+		return
+	}
+
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode login request")
+		return
+	}
+
+	tokens, err := h.service.Login(
+		r.Context(),
+		LoginParams{
+			Email:    req.Email,
+			Password: req.Password,
+		},
+	)
+	if err != nil {
+		h.writeMappedError(w, err, "failed to login user")
+		return
+	}
+
+	response := loginResponseDTO{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	}
+
+	if err := httpx.WriteJSON(w, http.StatusOK, response); err != nil {
+		h.log.Error(
+			"failed to write login response",
+			"error", err,
+		)
+	}
 }

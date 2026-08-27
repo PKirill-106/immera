@@ -53,7 +53,12 @@ func run() error {
 	)
 
 	authRepository := auth.NewPostgresRepository(pool)
-	authService := auth.NewService(authRepository)
+	authService := auth.NewService(
+		authRepository,
+		[]byte(cfg.Auth.JWTSecret),
+		cfg.Auth.AccessTokenTTL,
+		cfg.Auth.RefreshTokenTTL,
+	)
 	authHandler := auth.NewHandler(authService, log)
 
 	userRepository := user.NewPostgresRepository(pool)

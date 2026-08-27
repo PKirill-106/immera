@@ -4,17 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
 	Register(ctx context.Context, registration RegisterParams) error
-	// Login(ctx context.Context, credentials LoginParams) (string, error)
+	GetCredentialsByEmail(ctx context.Context, email string) (UserCredentials, error)
+	CreateRefreshSession(
+		ctx context.Context,
+		id uuid.UUID,
+		refreshTokenHash string,
+		refreshExpiresAt time.Time,
+	) error
 	// Logout(ctx context.Context, id uuid.UUID) error
-	// RefreshToken(ctx context.Context, token string) (string, error)
 }
 
 type PostgresRepository struct {
@@ -81,6 +88,65 @@ func (r *PostgresRepository) Register(ctx context.Context, registration Register
 
 	return nil
 
+}
+
+func (r *PostgresRepository) GetCredentialsByEmail(ctx context.Context, email string) (UserCredentials, error) {
+	var userCredentials UserCredentials
+
+	err := r.pool.QueryRow(
+		ctx,
+		`
+    SELECT id, email, password_hash
+    FROM users
+    WHERE email = $1
+    `,
+		email,
+	).Scan(
+		&userCredentials.ID,
+		&userCredentials.Email,
+		&userCredentials.PasswordHash,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return UserCredentials{}, ErrUserNotFound
+		}
+
+		return UserCredentials{}, fmt.Errorf("get user credentials by email: %w", err)
+	}
+
+	return userCredentials, nil
+}
+
+func (r *PostgresRepository) CreateRefreshSession(
+	ctx context.Context,
+	id uuid.UUID,
+	refreshTokenHash string,
+	refreshExpiresAt time.Time,
+) error {
+	tag, err := r.pool.Exec(
+		ctx,
+		`
+    INSERT into auth_refresh_tokens(
+      user_id,
+      token_hash,
+      expires_at
+    )
+    VALUES($1, $2, $3)
+    `,
+		id,
+		refreshTokenHash,
+		refreshExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("create refresh session: %w", err)
+	}
+
+	if tag.RowsAffected() != 1 {
+    return errors.New("insert refresh session: unexpected row count")
+	}
+
+	return nil
 }
 
 // func (r *PostgresRepository) Logout(ctx context.Context, id uuid.UUID) error {}

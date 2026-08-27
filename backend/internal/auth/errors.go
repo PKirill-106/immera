@@ -17,6 +17,7 @@ var (
 	ErrPhoneNumberTooLong     = errors.New("phone number must be at most 15 characters")
 
 	ErrUnauthorized = errors.New("unauthorized")
+	ErrUserNotFound = errors.New("user not found")
 	ErrInvalidToken = errors.New("invalid token")
 	ErrExpiredToken = errors.New("expired token")
 )
