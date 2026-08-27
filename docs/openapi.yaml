@@ -165,6 +165,25 @@ paths:
           $ref: '#/components/responses/RefreshUnauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Invalidate a refresh-token session
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '204':
+          description: Logout completed; unknown tokens are treated as already logged out
+        '400':
+          $ref: '#/components/responses/LogoutBadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   schemas:
@@ -438,6 +457,16 @@ components:
                 error:
                   code: REFRESH_TOKEN_EXPIRED
                   message: refresh token expired
+    LogoutBadRequest:
+      description: The logout request body or refresh token is empty or malformed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: invalid request
     InvalidUserID:
       description: The user ID is not a valid non-zero UUID
       content:

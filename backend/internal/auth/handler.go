@@ -17,6 +17,7 @@ type authService interface {
 	Register(ctx context.Context, registration RegisterDTO) error
 	Login(ctx context.Context, params LoginParams) (TokenPair, error)
 	Refresh(ctx context.Context, params RefreshParams) (TokenPair, error)
+	Logout(ctx context.Context, params LogoutParams) error
 	// Logout(ctx context.Context, id uuid.UUID) error
 	// RefreshToken(ctx context.Context, token string) (string, error)
 }
@@ -37,6 +38,7 @@ func (h *Handler) Routes(router chi.Router) {
 	router.Post("/auth/register", h.Register)
 	router.Post("/auth/login", h.Login)
 	router.Post("/auth/refresh", h.Refresh)
+	router.Post("/auth/logout", h.Logout)
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -134,4 +136,30 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		h.log.Error("failed to write refresh response", "error", err)
 	}
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req logoutRequestDTO
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode logout request")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode logout request")
+		return
+	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		h.writeMappedError(w, ErrInvalidRequest, "empty logout refresh token")
+		return
+	}
+
+	if err := h.service.Logout(r.Context(), LogoutParams{RefreshToken: req.RefreshToken}); err != nil {
+		h.writeMappedError(w, err, "failed to logout user")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

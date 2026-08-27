@@ -187,3 +187,18 @@ func (s *Service) Refresh(ctx context.Context, params RefreshParams) (TokenPair,
 		RefreshToken: newRefreshToken,
 	}, nil
 }
+
+func (s *Service) Logout(ctx context.Context, params LogoutParams) error {
+	if strings.TrimSpace(params.RefreshToken) == "" {
+		return ErrInvalidRequest
+	}
+
+	if err := s.repo.DeleteRefreshSessionByTokenHash(
+		ctx,
+		hashRefreshToken(params.RefreshToken),
+	); err != nil {
+		return fmt.Errorf("logout: delete refresh session: %w", err)
+	}
+
+	return nil
+}

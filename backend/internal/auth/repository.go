@@ -29,6 +29,7 @@ type Repository interface {
 		newTokenHash string,
 		newExpiresAt time.Time,
 	) error
+	DeleteRefreshSessionByTokenHash(ctx context.Context, tokenHash string) error
 	// Logout(ctx context.Context, id uuid.UUID) error
 }
 
@@ -229,6 +230,22 @@ func (r *PostgresRepository) RotateRefreshSession(
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit refresh rotation transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) DeleteRefreshSessionByTokenHash(
+	ctx context.Context,
+	tokenHash string,
+) error {
+	_, err := r.pool.Exec(
+		ctx,
+		`DELETE FROM auth_refresh_tokens WHERE token_hash = $1`,
+		tokenHash,
+	)
+	if err != nil {
+		return fmt.Errorf("delete refresh session by token hash: %w", err)
 	}
 
 	return nil

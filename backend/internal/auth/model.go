@@ -20,6 +20,10 @@ type LoginParams struct {
 type RefreshParams struct {
 	RefreshToken string
 }
+
+type LogoutParams struct {
+	RefreshToken string
+}
 type TokenPair struct {
 	AccessToken  string
 	RefreshToken string

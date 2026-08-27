@@ -15,6 +15,10 @@ type refreshRequestDTO struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type logoutRequestDTO struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 type tokenPairResponseDTO struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`

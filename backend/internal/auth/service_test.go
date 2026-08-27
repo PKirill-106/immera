@@ -11,29 +11,32 @@ import (
 )
 
 type stubRepository struct {
-	registered           RegisterParams
-	registerCalled       bool
-	registerErr          error
-	credentials          UserCredentials
-	credentialsEmail     string
-	getCredentialsCalled bool
-	getCredentialsErr    error
-	refreshUserID        uuid.UUID
-	refreshTokenHash     string
-	refreshExpiresAt     time.Time
-	refreshSessionCalled bool
-	refreshSessionErr    error
-	refreshSessions      map[string]RefreshSession
-	refreshSession       RefreshSession
-	getRefreshTokenHash  string
-	getRefreshCalled     bool
-	getRefreshErr        error
-	rotateOldTokenHash   string
-	rotateNewTokenHash   string
-	rotateUserID         uuid.UUID
-	rotateExpiresAt      time.Time
-	rotateCalled         bool
-	rotateErr            error
+	registered             RegisterParams
+	registerCalled         bool
+	registerErr            error
+	credentials            UserCredentials
+	credentialsEmail       string
+	getCredentialsCalled   bool
+	getCredentialsErr      error
+	refreshUserID          uuid.UUID
+	refreshTokenHash       string
+	refreshExpiresAt       time.Time
+	refreshSessionCalled   bool
+	refreshSessionErr      error
+	refreshSessions        map[string]RefreshSession
+	refreshSession         RefreshSession
+	getRefreshTokenHash    string
+	getRefreshCalled       bool
+	getRefreshErr          error
+	rotateOldTokenHash     string
+	rotateNewTokenHash     string
+	rotateUserID           uuid.UUID
+	rotateExpiresAt        time.Time
+	rotateCalled           bool
+	rotateErr              error
+	deleteRefreshTokenHash string
+	deleteRefreshCalled    bool
+	deleteRefreshErr       error
 }
 
 func (r *stubRepository) Register(_ context.Context, registration RegisterParams) error {
@@ -102,6 +105,22 @@ func (r *stubRepository) RotateRefreshSession(
 		}
 		delete(r.refreshSessions, oldTokenHash)
 		r.refreshSessions[newTokenHash] = RefreshSession{UserID: userID, ExpiresAt: newExpiresAt}
+	}
+
+	return nil
+}
+
+func (r *stubRepository) DeleteRefreshSessionByTokenHash(
+	_ context.Context,
+	tokenHash string,
+) error {
+	r.deleteRefreshCalled = true
+	r.deleteRefreshTokenHash = tokenHash
+	if r.deleteRefreshErr != nil {
+		return r.deleteRefreshErr
+	}
+	if r.refreshSessions != nil {
+		delete(r.refreshSessions, tokenHash)
 	}
 
 	return nil
@@ -490,6 +509,43 @@ func TestRefreshWrapsRepositoryFailure(t *testing.T) {
 	_, err := service.Refresh(context.Background(), RefreshParams{RefreshToken: "refresh-token"})
 	if !errors.Is(err, repositoryError) {
 		t.Fatalf("Refresh() error = %v, want wrapped %v", err, repositoryError)
+	}
+}
+
+func TestLogoutDeletesRefreshSession(t *testing.T) {
+	t.Parallel()
+
+	rawToken := "refresh-token"
+	tokenHash := hashRefreshToken(rawToken)
+	repository := &stubRepository{
+		refreshSessions: map[string]RefreshSession{
+			tokenHash: {UserID: uuid.New(), ExpiresAt: time.Now().Add(time.Hour)},
+		},
+	}
+	service := newTestService(repository)
+
+	if err := service.Logout(context.Background(), LogoutParams{RefreshToken: rawToken}); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if repository.deleteRefreshTokenHash != tokenHash {
+		t.Fatalf("deleted token hash = %q, want %q", repository.deleteRefreshTokenHash, tokenHash)
+	}
+	if _, exists := repository.refreshSessions[tokenHash]; exists {
+		t.Fatal("refresh session still exists after logout")
+	}
+}
+
+func TestLogoutUnknownTokenIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	repository := &stubRepository{refreshSessions: make(map[string]RefreshSession)}
+	service := newTestService(repository)
+
+	if err := service.Logout(
+		context.Background(),
+		LogoutParams{RefreshToken: "unknown-refresh-token"},
+	); err != nil {
+		t.Fatalf("Logout() error = %v, want nil", err)
 	}
 }
 

@@ -26,6 +26,9 @@ type stubAuthService struct {
 	refreshParams  RefreshParams
 	refreshTokens  TokenPair
 	refreshCalled  bool
+	logoutErr      error
+	logoutParams   LogoutParams
+	logoutCalled   bool
 }
 
 func (s *stubAuthService) Register(_ context.Context, registration RegisterDTO) error {
@@ -44,6 +47,12 @@ func (s *stubAuthService) Refresh(_ context.Context, params RefreshParams) (Toke
 	s.refreshCalled = true
 	s.refreshParams = params
 	return s.refreshTokens, s.refreshErr
+}
+
+func (s *stubAuthService) Logout(_ context.Context, params LogoutParams) error {
+	s.logoutCalled = true
+	s.logoutParams = params
+	return s.logoutErr
 }
 
 func TestRegisterRejectsInvalidRequestBody(t *testing.T) {
@@ -278,6 +287,28 @@ func TestRefreshReturnsRotatedTokenPair(t *testing.T) {
 	}
 	if body.AccessToken != "new-access" || body.RefreshToken != "new-refresh" {
 		t.Fatalf("response = %#v, want rotated token pair", body)
+	}
+}
+
+func TestLogoutReturnsNoContent(t *testing.T) {
+	t.Parallel()
+
+	service := &stubAuthService{}
+	handler := newTestHandler(service)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/auth/logout",
+		strings.NewReader(`{"refresh_token":"refresh-token"}`),
+	)
+	response := httptest.NewRecorder()
+
+	handler.Logout(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if service.logoutParams.RefreshToken != "refresh-token" {
+		t.Fatalf("logout token = %q, want refresh-token", service.logoutParams.RefreshToken)
 	}
 }
 
