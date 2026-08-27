@@ -45,6 +45,11 @@ func (s *Service) Register(ctx context.Context, registration RegisterDTO) error 
 	if err != nil {
 		return err
 	}
+	if phoneNumber != nil {
+		if err := validatePhoneNumber(*phoneNumber); err != nil {
+			return err
+		}
+	}
 
 	if err := validatePassword(registration.Password); err != nil {
 		return err

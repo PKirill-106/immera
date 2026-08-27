@@ -106,17 +106,16 @@ func TestRegisterAllowsOmittedOptionalFields(t *testing.T) {
 	}
 }
 
-func TestRegisterPreservesEmptyOptionalFieldsForLaterPolicyDecision(t *testing.T) {
+func TestRegisterPreservesEmptyOptionalNameForLaterPolicyDecision(t *testing.T) {
 	t.Parallel()
 
 	repository := &stubRepository{}
 	service := newTestService(repository)
 
 	err := service.Register(context.Background(), RegisterDTO{
-		Name:        stringPointer("   "),
-		Email:       "jane@example.com",
-		PhoneNumber: stringPointer("   "),
-		Password:    "password1!",
+		Name:     stringPointer("   "),
+		Email:    "jane@example.com",
+		Password: "password1!",
 	})
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
@@ -124,8 +123,8 @@ func TestRegisterPreservesEmptyOptionalFieldsForLaterPolicyDecision(t *testing.T
 	if repository.registered.Name == nil || *repository.registered.Name != "" {
 		t.Fatalf("registered name = %v, want non-nil empty string", repository.registered.Name)
 	}
-	if repository.registered.PhoneNumber == nil || *repository.registered.PhoneNumber != "" {
-		t.Fatalf("registered phone number = %v, want non-nil empty string", repository.registered.PhoneNumber)
+	if repository.registered.PhoneNumber != nil {
+		t.Fatalf("registered phone number = %v, want nil", repository.registered.PhoneNumber)
 	}
 }
 

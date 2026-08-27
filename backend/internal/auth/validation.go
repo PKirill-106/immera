@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -46,6 +47,16 @@ func validatePassword(password string) error {
 	}
 	if !hasSpecial {
 		return ErrPasswordMissingSpecial
+	}
+
+	return nil
+}
+
+var phoneRegexp = regexp.MustCompile(`^\+[1-9]\d{7,14}$`)
+
+func validatePhoneNumber(phone string) error {
+	if !phoneRegexp.MatchString(phone) {
+		return ErrInvalidPhoneNumber
 	}
 
 	return nil

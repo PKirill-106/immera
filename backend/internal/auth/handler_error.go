@@ -54,6 +54,12 @@ func mapError(err error) httpx.MappedError {
 			Code:    "INVALID_EMAIL",
 			Message: "invalid email",
 		}
+	case errors.Is(err, ErrInvalidPhoneNumber):
+		return httpx.MappedError{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_PHONE_NUMBER",
+			Message: "invalid phone number",
+		}
 	case errors.Is(err, ErrInvalidRequest):
 		return httpx.MappedError{
 			Status:  http.StatusBadRequest,

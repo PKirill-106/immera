@@ -7,6 +7,7 @@ var (
 	ErrPhoneNumberAlreadyExists = errors.New("phone number already exists")
 	ErrInvalidCredentials       = errors.New("invalid credentials")
 	ErrInvalidEmail             = errors.New("invalid email received")
+	ErrInvalidPhoneNumber       = errors.New("invalid phone number received")
 	ErrInvalidRequest           = errors.New("invalid data received")
 
 	ErrPasswordTooShort       = errors.New("password must be at least 8 characters")
