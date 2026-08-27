@@ -17,7 +17,7 @@ export DATABASE_URL
 	migrate-version migrate-up migrate-down check-database-url
 
 go-run:
-	cd backend && go run ./cmd/api
+	cd backend && set -a && . ./.env && set +a && go run ./cmd/api
 
 pg-run:
 	$(COMPOSE) up -d postgres 
