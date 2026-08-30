@@ -68,14 +68,23 @@ func run() error {
 	userService := user.NewService(userRepository)
 	userHandler := user.NewHandler(userService, log)
 
-	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, []httpserver.RouteRegistrar{
-		healthHandler.Routes,
-		docsHandler.Routes,
-	},
+	router := httpserver.NewRouter(
+		log,
+		cfg.HTTP.AllowedOrigins,
+		[]byte(cfg.Auth.JWTSecret),
 		[]httpserver.RouteRegistrar{
-			userHandler.Routes,
+			healthHandler.Routes,
+			docsHandler.Routes,
+		},
+		[]httpserver.RouteRegistrar{
 			authHandler.Routes,
-		})
+			userHandler.Routes,
+		},
+		[]httpserver.RouteRegistrar{
+			userHandler.ProtectedRoutes,
+		},
+	)
+
 	server := httpserver.NewServer(cfg.HTTP, router, log)
 
 	serverErrors := make(chan error, 1)

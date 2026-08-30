@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"immera/internal/auth"
 	"immera/internal/platform/httpx"
 )
 
@@ -37,6 +38,10 @@ func (h *Handler) Routes(router chi.Router) {
 	router.Put("/users/{userID}", h.UpdateUser)
 }
 
+func (h *Handler) ProtectedRoutes(router chi.Router) {
+	router.Get("/users/me", h.GetMe)
+}
+
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "userID"))
 
@@ -58,6 +63,42 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		h.log.Error(
 			"failed to write user response",
 			"user_id", id.String(),
+			"error", err,
+		)
+	}
+}
+
+func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		if err := httpx.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"INTERNAL_ERROR",
+			"internal server error",
+		); err != nil {
+			h.log.Error(
+				"failed to write internal error response",
+				"error", err,
+			)
+		}
+
+		h.log.Error("authenticated user ID missing from context")
+		return
+	}
+
+	foundUser, err := h.service.GetByID(r.Context(), userID)
+	if err != nil {
+		h.writeMappedError(w, err, "failed to get user", "user_id", userID.String())
+		return
+	}
+
+	response := toUserByIDResponse(foundUser)
+
+	if err := httpx.WriteJSON(w, http.StatusOK, response); err != nil {
+		h.log.Error(
+			"failed to write user response",
+			"user_id", userID.String(),
 			"error", err,
 		)
 	}

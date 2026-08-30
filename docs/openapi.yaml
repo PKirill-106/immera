@@ -9,32 +9,28 @@ servers:
     description: Main API
 
 paths:
-  /users/{userID}:
+  /users/me:
     get:
       tags:
         - User
-      summary: Get user by ID
-      parameters:
-        - name: userID
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-
+      summary: Get the authenticated user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: User found
+          description: Authenticated user found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          $ref: '#/components/responses/InvalidUserID'
+                $ref: '#/components/schemas/AuthUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/UserNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /users/{userID}:
     put:
       tags:
         - User
@@ -232,6 +228,12 @@ paths:
           $ref: '#/components/responses/InternalServerError'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: HS256 JWT access token returned by login or token refresh
   schemas:
     ErrorResponse:
       type: object
@@ -703,7 +705,7 @@ components:
               code: INVALID_REQUEST
               message: invalid request
     Unauthorized:
-      description: Authentication is required or credentials are invalid
+      description: A valid Bearer access token is required
       content:
         application/json:
           schema:
@@ -711,7 +713,7 @@ components:
           example:
             error:
               code: UNAUTHORIZED
-              message: authentication is required
+              message: unauthorized
     Forbidden:
       description: The authenticated user does not have permission to perform this action
       content:
