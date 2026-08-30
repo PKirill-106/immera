@@ -38,6 +38,9 @@ type stubUserService struct {
 	updateSettingsParams UpdateSettingsParams
 	updateSettingsCalled bool
 	updateSettingsErr    error
+	deleteUserID         uuid.UUID
+	deleteCalled         bool
+	deleteErr            error
 }
 
 func (s *stubUserService) GetByID(_ context.Context, userID uuid.UUID) (User, error) {
@@ -75,6 +78,12 @@ func (s *stubUserService) UpdateSettings(
 	s.updateSettingsUserID = userID
 	s.updateSettingsParams = params
 	return s.updateSettingsErr
+}
+
+func (s *stubUserService) DeleteUser(_ context.Context, userID uuid.UUID) error {
+	s.deleteCalled = true
+	s.deleteUserID = userID
+	return s.deleteErr
 }
 
 func TestGetMeUsesAuthenticatedUserID(t *testing.T) {
@@ -314,6 +323,40 @@ func TestUpdateMySettingsRejectsInvalidRequestBody(t *testing.T) {
 	}
 }
 
+func TestDeleteMeUsesAuthenticatedUserID(t *testing.T) {
+	t.Parallel()
+
+	authenticatedUserID := uuid.New()
+	clientSuppliedUserID := uuid.New()
+	service := &stubUserService{}
+	router := newProtectedUserTestRouter(service)
+	request := newAuthenticatedUserRequest(
+		t,
+		http.MethodDelete,
+		"/api/v1/users/me?userID="+clientSuppliedUserID.String(),
+		nil,
+		authenticatedUserID,
+	)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if response.Body.Len() != 0 {
+		t.Fatalf("response body = %q, want empty", response.Body.String())
+	}
+	if !service.deleteCalled || service.deleteUserID != authenticatedUserID {
+		t.Fatalf(
+			"DeleteUser called = %t with %s, want authenticated user %s",
+			service.deleteCalled,
+			service.deleteUserID,
+			authenticatedUserID,
+		)
+	}
+}
+
 func TestCurrentUserHandlersTreatMissingContextAsInternalError(t *testing.T) {
 	t.Parallel()
 
@@ -350,6 +393,12 @@ func TestCurrentUserHandlersTreatMissingContextAsInternalError(t *testing.T) {
 			body:   strings.NewReader(`{"default_language":"en","theme":"dark"}`),
 			serve:  (*Handler).UpdateUserSettings,
 		},
+		{
+			name:   "delete current user",
+			method: http.MethodDelete,
+			path:   "/users/me",
+			serve:  (*Handler).DeleteUser,
+		},
 	}
 
 	for _, tt := range tests {
@@ -367,7 +416,8 @@ func TestCurrentUserHandlersTreatMissingContextAsInternalError(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
 			}
 			assertUserErrorResponse(t, response, "INTERNAL_ERROR", "internal server error")
-			if service.getByIDCalled || service.settingsCalled || service.updateCalled || service.updateSettingsCalled {
+			if service.getByIDCalled || service.settingsCalled || service.updateCalled ||
+				service.updateSettingsCalled || service.deleteCalled {
 				t.Fatal("service was called without an authenticated user ID")
 			}
 		})
@@ -385,6 +435,7 @@ func TestProtectedUserRoutesRequireAuthentication(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/users/me/settings"},
 		{method: http.MethodPut, path: "/api/v1/users/me"},
 		{method: http.MethodPut, path: "/api/v1/users/me/settings"},
+		{method: http.MethodDelete, path: "/api/v1/users/me"},
 	}
 
 	for _, tt := range tests {
@@ -402,7 +453,8 @@ func TestProtectedUserRoutesRequireAuthentication(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
 			}
 			assertUserErrorResponse(t, response, "UNAUTHORIZED", "unauthorized")
-			if service.getByIDCalled || service.settingsCalled || service.updateCalled || service.updateSettingsCalled {
+			if service.getByIDCalled || service.settingsCalled || service.updateCalled ||
+				service.updateSettingsCalled || service.deleteCalled {
 				t.Fatal("service was called for an unauthenticated request")
 			}
 		})
@@ -420,6 +472,7 @@ func TestLegacyExplicitIDRoutesAreNotRegistered(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/users/" + userID.String()},
 		{method: http.MethodGet, path: "/api/v1/users/" + userID.String() + "/settings"},
 		{method: http.MethodPut, path: "/api/v1/users/" + userID.String()},
+		{method: http.MethodDelete, path: "/api/v1/users/" + userID.String()},
 	}
 
 	for _, tt := range tests {
@@ -436,7 +489,8 @@ func TestLegacyExplicitIDRoutesAreNotRegistered(t *testing.T) {
 			if response.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
 			}
-			if service.getByIDCalled || service.settingsCalled || service.updateCalled || service.updateSettingsCalled {
+			if service.getByIDCalled || service.settingsCalled || service.updateCalled ||
+				service.updateSettingsCalled || service.deleteCalled {
 				t.Fatal("service was called through a legacy explicit-ID route")
 			}
 		})

@@ -84,3 +84,15 @@ func (s *Service) UpdateSettings(
 
 	return nil
 }
+
+func (s *Service) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	if id == uuid.Nil {
+		return ErrInvalidUserID
+	}
+
+	if err := s.repo.DeleteUser(ctx, id); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+
+	return nil
+}

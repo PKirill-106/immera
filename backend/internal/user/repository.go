@@ -16,6 +16,7 @@ type Repository interface {
 	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error
 	UpdateSettings(ctx context.Context, id uuid.UUID, settings UpdateSettingsParams) error
+	DeleteUser(ctx context.Context, id uuid.UUID) error
 }
 
 type PostgresRepository struct {
@@ -196,6 +197,28 @@ func (r *PostgresRepository) UpdateSettings(ctx context.Context, id uuid.UUID, s
 	}
 	if !settingsUpdated {
 		return fmt.Errorf("user settings invariant violated for user %s", id)
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.pool.Exec(
+		ctx,
+		`DELETE FROM users WHERE id = $1`,
+		id,
+	)
+
+	return mapDeleteUserResult(tag, err)
+}
+
+func mapDeleteUserResult(tag pgconn.CommandTag, err error) error {
+	if err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
 	}
 
 	return nil

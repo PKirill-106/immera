@@ -19,6 +19,7 @@ type userService interface {
 	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error
 	UpdateSettings(ctx context.Context, id uuid.UUID, settings UpdateSettingsParams) error
+	DeleteUser(ctx context.Context, id uuid.UUID) error
 }
 
 type Handler struct {
@@ -38,6 +39,7 @@ func (h *Handler) ProtectedRoutes(router chi.Router) {
 	router.Get("/users/me/settings", h.GetUserSettings)
 	router.Put("/users/me", h.UpdateUser)
 	router.Put("/users/me/settings", h.UpdateUserSettings)
+	router.Delete("/users/me", h.DeleteUser)
 }
 
 func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +156,20 @@ func (h *Handler) UpdateUserSettings(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		h.writeMappedError(w, err, "failed to update settings", "user_id", userID.String())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.authenticatedUserID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.service.DeleteUser(r.Context(), userID); err != nil {
+		h.writeMappedError(w, err, "failed to delete user", "user_id", userID.String())
 		return
 	}
 
