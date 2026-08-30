@@ -49,3 +49,38 @@ func TestNormalizeUpdateUser(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeUpdateSettings(t *testing.T) {
+	t.Parallel()
+
+	got, ok := normalizeUpdateSettings(UpdateSettingsParams{
+		DefaultLanguage: "  EN  ",
+		Theme:           "  DARK  ",
+	})
+	if !ok {
+		t.Fatal("normalizeUpdateSettings() rejected valid settings")
+	}
+	if got.DefaultLanguage != "en" || got.Theme != "dark" {
+		t.Fatalf("normalizeUpdateSettings() = %#v", got)
+	}
+
+	tests := []struct {
+		name     string
+		settings UpdateSettingsParams
+	}{
+		{name: "empty language", settings: UpdateSettingsParams{Theme: "dark"}},
+		{name: "long language", settings: UpdateSettingsParams{DefaultLanguage: strings.Repeat("a", 11), Theme: "dark"}},
+		{name: "empty theme", settings: UpdateSettingsParams{DefaultLanguage: "en"}},
+		{name: "long theme", settings: UpdateSettingsParams{DefaultLanguage: "en", Theme: strings.Repeat("a", 11)}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, ok := normalizeUpdateSettings(tt.settings); ok {
+				t.Fatalf("normalizeUpdateSettings(%#v) accepted invalid settings", tt.settings)
+			}
+		})
+	}
+}

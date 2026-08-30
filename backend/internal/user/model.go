@@ -29,3 +29,8 @@ type UpdateUserParams struct {
 	Email       string
 	PhoneNumber string
 }
+
+type UpdateSettingsParams struct {
+	DefaultLanguage string
+	Theme           string
+}

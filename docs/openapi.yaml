@@ -77,6 +77,30 @@ paths:
           $ref: '#/components/responses/UserNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    put:
+      tags:
+        - User
+      summary: Update the authenticated user's settings
+      operationId: updateCurrentUserSettings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsRequest'
+      responses:
+        '204':
+          description: User settings updated successfully
+        '400':
+          $ref: '#/components/responses/UpdateSettingsBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /auth/register:
     post:
       tags:
@@ -283,6 +307,25 @@ components:
           minLength: 1
           maxLength: 15
           example: '+48123456789'
+
+    UpdateSettingsRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - default_language
+        - theme
+      properties:
+        default_language:
+          type: string
+          minLength: 1
+          maxLength: 10
+          example: en
+        theme:
+          type: string
+          minLength: 1
+          maxLength: 10
+          example: dark
+
     RegisterRequest:
       type: object
       additionalProperties: false
@@ -618,6 +661,25 @@ components:
                 error:
                   code: INVALID_USER_DATA
                   message: invalid user data
+    UpdateSettingsBadRequest:
+      description: The settings request body or fields are invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidRequest:
+              summary: Malformed request body
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: invalid request
+            invalidSettingsData:
+              summary: Invalid settings fields
+              value:
+                error:
+                  code: INVALID_SETTINGS_DATA
+                  message: invalid user settings data
     UserNotFound:
       description: The authenticated user no longer exists
       content:

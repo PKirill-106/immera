@@ -15,6 +15,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error
+	UpdateSettings(ctx context.Context, id uuid.UUID, settings UpdateSettingsParams) error
 }
 
 type PostgresRepository struct {
@@ -154,6 +155,47 @@ func (r *PostgresRepository) UpdateUser(ctx context.Context, id uuid.UUID, user 
 
 	if tag.RowsAffected() == 0 {
 		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) UpdateSettings(ctx context.Context, id uuid.UUID, settings UpdateSettingsParams) error {
+	var (
+		userExists      bool
+		settingsUpdated bool
+	)
+
+	err := r.pool.QueryRow(
+		ctx,
+		`
+		WITH updated_settings AS (
+			UPDATE user_settings
+			SET
+				default_language = $1,
+				theme = $2,
+				updated_at = now()
+			WHERE user_id = $3
+			RETURNING user_id
+		)
+		SELECT
+			EXISTS (SELECT 1 FROM users WHERE id = $3),
+			EXISTS (SELECT 1 FROM updated_settings)
+		`,
+		settings.DefaultLanguage,
+		settings.Theme,
+		id,
+	).Scan(&userExists, &settingsUpdated)
+
+	if err != nil {
+		return fmt.Errorf("update settings: %w", err)
+	}
+
+	if !userExists {
+		return ErrUserNotFound
+	}
+	if !settingsUpdated {
+		return fmt.Errorf("user settings invariant violated for user %s", id)
 	}
 
 	return nil

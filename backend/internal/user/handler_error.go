@@ -27,6 +27,12 @@ func mapError(err error) httpx.MappedError {
 			Code:    "INVALID_USER_DATA",
 			Message: "invalid user data",
 		}
+	case errors.Is(err, ErrInvalidSettingsData):
+		return httpx.MappedError{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_SETTINGS_DATA",
+			Message: "invalid user settings data",
+		}
 	case errors.Is(err, ErrUserNotFound):
 		return httpx.MappedError{
 			Status:  http.StatusNotFound,

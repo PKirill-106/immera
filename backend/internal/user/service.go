@@ -62,3 +62,25 @@ func (s *Service) UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserP
 
 	return nil
 }
+func (s *Service) UpdateSettings(
+	ctx context.Context,
+	id uuid.UUID,
+	settings UpdateSettingsParams,
+) error {
+	if id == uuid.Nil {
+		return ErrInvalidUserID
+	}
+
+	normalizedSettings, ok := normalizeUpdateSettings(settings)
+
+	if !ok {
+		return ErrInvalidSettingsData
+	}
+
+	err := s.repo.UpdateSettings(ctx, id, normalizedSettings)
+	if err != nil {
+		return fmt.Errorf("update settings: %w", err)
+	}
+
+	return nil
+}

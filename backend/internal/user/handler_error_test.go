@@ -39,6 +39,13 @@ func TestMapError(t *testing.T) {
 			message: "invalid user data",
 		},
 		{
+			name:    "invalid settings data",
+			err:     ErrInvalidSettingsData,
+			status:  http.StatusBadRequest,
+			code:    "INVALID_SETTINGS_DATA",
+			message: "invalid user settings data",
+		},
+		{
 			name:    "user not found",
 			err:     ErrUserNotFound,
 			status:  http.StatusNotFound,

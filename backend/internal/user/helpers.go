@@ -26,3 +26,16 @@ func normalizeUpdateUser(user UpdateUserParams) (UpdateUserParams, error) {
 
 	return user, nil
 }
+func normalizeUpdateSettings(settings UpdateSettingsParams) (UpdateSettingsParams, bool) {
+	settings.DefaultLanguage = strings.ToLower(strings.TrimSpace(settings.DefaultLanguage))
+	settings.Theme = strings.ToLower(strings.TrimSpace(settings.Theme))
+
+	if settings.DefaultLanguage == "" ||
+		utf8.RuneCountInString(settings.DefaultLanguage) > 10 ||
+		settings.Theme == "" ||
+		utf8.RuneCountInString(settings.Theme) > 10 {
+		return UpdateSettingsParams{}, false
+	}
+
+	return settings, true
+}

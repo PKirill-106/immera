@@ -18,3 +18,7 @@ type updateUserRequest struct {
 	Email       string `json:"email"`
 	PhoneNumber string `json:"phone_number"`
 }
+type updateSettingsRequest struct {
+	DefaultLanguage string `json:"default_language"`
+	Theme           string `json:"theme"`
+}

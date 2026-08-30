@@ -18,6 +18,7 @@ type userService interface {
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserSettings(ctx context.Context, id uuid.UUID) (UserSettings, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, user UpdateUserParams) error
+	UpdateSettings(ctx context.Context, id uuid.UUID, settings UpdateSettingsParams) error
 }
 
 type Handler struct {
@@ -36,6 +37,7 @@ func (h *Handler) ProtectedRoutes(router chi.Router) {
 	router.Get("/users/me", h.GetMe)
 	router.Get("/users/me/settings", h.GetUserSettings)
 	router.Put("/users/me", h.UpdateUser)
+	router.Put("/users/me/settings", h.UpdateUserSettings)
 }
 
 func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +118,42 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		h.writeMappedError(w, err, "failed to update user", "user_id", userID.String())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) UpdateUserSettings(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.authenticatedUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req updateSettingsRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update settings request", "user_id", userID.String())
+		return
+	}
+
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update settings request", "user_id", userID.String())
+		return
+	}
+
+	err := h.service.UpdateSettings(
+		r.Context(),
+		userID,
+		UpdateSettingsParams{
+			DefaultLanguage: req.DefaultLanguage,
+			Theme:           req.Theme,
+		},
+	)
+	if err != nil {
+		h.writeMappedError(w, err, "failed to update settings", "user_id", userID.String())
 		return
 	}
 

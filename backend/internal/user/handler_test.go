@@ -22,18 +22,22 @@ import (
 const userHandlerTestJWTSecret = "test-secret-that-is-at-least-32-bytes"
 
 type stubUserService struct {
-	user           User
-	getByIDUserID  uuid.UUID
-	getByIDCalled  bool
-	getByIDErr     error
-	settings       UserSettings
-	settingsUserID uuid.UUID
-	settingsCalled bool
-	settingsErr    error
-	updateUserID   uuid.UUID
-	updateParams   UpdateUserParams
-	updateCalled   bool
-	updateErr      error
+	user                 User
+	getByIDUserID        uuid.UUID
+	getByIDCalled        bool
+	getByIDErr           error
+	settings             UserSettings
+	settingsUserID       uuid.UUID
+	settingsCalled       bool
+	settingsErr          error
+	updateUserID         uuid.UUID
+	updateParams         UpdateUserParams
+	updateCalled         bool
+	updateErr            error
+	updateSettingsUserID uuid.UUID
+	updateSettingsParams UpdateSettingsParams
+	updateSettingsCalled bool
+	updateSettingsErr    error
 }
 
 func (s *stubUserService) GetByID(_ context.Context, userID uuid.UUID) (User, error) {
@@ -60,6 +64,17 @@ func (s *stubUserService) UpdateUser(
 	s.updateUserID = userID
 	s.updateParams = params
 	return s.updateErr
+}
+
+func (s *stubUserService) UpdateSettings(
+	_ context.Context,
+	userID uuid.UUID,
+	params UpdateSettingsParams,
+) error {
+	s.updateSettingsCalled = true
+	s.updateSettingsUserID = userID
+	s.updateSettingsParams = params
+	return s.updateSettingsErr
 }
 
 func TestGetMeUsesAuthenticatedUserID(t *testing.T) {
@@ -220,6 +235,85 @@ func TestUpdateMeRejectsInvalidRequestBody(t *testing.T) {
 	}
 }
 
+func TestUpdateMySettingsUsesAuthenticatedUserID(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	service := &stubUserService{}
+	router := newProtectedUserTestRouter(service)
+	response := httptest.NewRecorder()
+	body := strings.NewReader(`{"default_language":"en","theme":"dark"}`)
+
+	router.ServeHTTP(
+		response,
+		newAuthenticatedUserRequest(t, http.MethodPut, "/api/v1/users/me/settings", body, userID),
+	)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if !service.updateSettingsCalled || service.updateSettingsUserID != userID {
+		t.Fatalf(
+			"UpdateSettings called = %t with %s, want %s",
+			service.updateSettingsCalled,
+			service.updateSettingsUserID,
+			userID,
+		)
+	}
+	want := UpdateSettingsParams{DefaultLanguage: "en", Theme: "dark"}
+	if service.updateSettingsParams != want {
+		t.Fatalf("UpdateSettings params = %#v, want %#v", service.updateSettingsParams, want)
+	}
+}
+
+func TestUpdateMySettingsRejectsInvalidRequestBody(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"default_language":`},
+		{
+			name: "unknown field",
+			body: `{"default_language":"en","theme":"dark","user_id":` +
+				`"00000000-0000-0000-0000-000000000000"}`,
+		},
+		{
+			name: "multiple JSON values",
+			body: `{"default_language":"en","theme":"dark"} {}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			userID := uuid.New()
+			service := &stubUserService{}
+			router := newProtectedUserTestRouter(service)
+			request := newAuthenticatedUserRequest(
+				t,
+				http.MethodPut,
+				"/api/v1/users/me/settings",
+				strings.NewReader(tt.body),
+				userID,
+			)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+			}
+			assertUserErrorResponse(t, response, "INVALID_REQUEST", "invalid request")
+			if service.updateSettingsCalled {
+				t.Fatal("service was called for an invalid settings request")
+			}
+		})
+	}
+}
+
 func TestCurrentUserHandlersTreatMissingContextAsInternalError(t *testing.T) {
 	t.Parallel()
 
@@ -249,6 +343,13 @@ func TestCurrentUserHandlersTreatMissingContextAsInternalError(t *testing.T) {
 			body:   strings.NewReader(`{"name":"Jane","email":"jane@example.com","phone_number":"+48123456789"}`),
 			serve:  (*Handler).UpdateUser,
 		},
+		{
+			name:   "update current user settings",
+			method: http.MethodPut,
+			path:   "/users/me/settings",
+			body:   strings.NewReader(`{"default_language":"en","theme":"dark"}`),
+			serve:  (*Handler).UpdateUserSettings,
+		},
 	}
 
 	for _, tt := range tests {
@@ -266,7 +367,7 @@ func TestCurrentUserHandlersTreatMissingContextAsInternalError(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
 			}
 			assertUserErrorResponse(t, response, "INTERNAL_ERROR", "internal server error")
-			if service.getByIDCalled || service.settingsCalled || service.updateCalled {
+			if service.getByIDCalled || service.settingsCalled || service.updateCalled || service.updateSettingsCalled {
 				t.Fatal("service was called without an authenticated user ID")
 			}
 		})
@@ -283,6 +384,7 @@ func TestProtectedUserRoutesRequireAuthentication(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/users/me"},
 		{method: http.MethodGet, path: "/api/v1/users/me/settings"},
 		{method: http.MethodPut, path: "/api/v1/users/me"},
+		{method: http.MethodPut, path: "/api/v1/users/me/settings"},
 	}
 
 	for _, tt := range tests {
@@ -300,7 +402,7 @@ func TestProtectedUserRoutesRequireAuthentication(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
 			}
 			assertUserErrorResponse(t, response, "UNAUTHORIZED", "unauthorized")
-			if service.getByIDCalled || service.settingsCalled || service.updateCalled {
+			if service.getByIDCalled || service.settingsCalled || service.updateCalled || service.updateSettingsCalled {
 				t.Fatal("service was called for an unauthenticated request")
 			}
 		})
@@ -334,7 +436,7 @@ func TestLegacyExplicitIDRoutesAreNotRegistered(t *testing.T) {
 			if response.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
 			}
-			if service.getByIDCalled || service.settingsCalled || service.updateCalled {
+			if service.getByIDCalled || service.settingsCalled || service.updateCalled || service.updateSettingsCalled {
 				t.Fatal("service was called through a legacy explicit-ID route")
 			}
 		})
