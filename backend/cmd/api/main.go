@@ -78,7 +78,6 @@ func run() error {
 		},
 		[]httpserver.RouteRegistrar{
 			authHandler.Routes,
-			userHandler.Routes,
 		},
 		[]httpserver.RouteRegistrar{
 			userHandler.ProtectedRoutes,

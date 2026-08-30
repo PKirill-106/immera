@@ -32,58 +32,15 @@ func NewHandler(service userService, log *slog.Logger) *Handler {
 	}
 }
 
-func (h *Handler) Routes(router chi.Router) {
-	router.Get("/users/{userID}", h.GetByID)
-	router.Get("/users/{userID}/settings", h.GetUserSettings)
-	router.Put("/users/{userID}", h.UpdateUser)
-}
-
 func (h *Handler) ProtectedRoutes(router chi.Router) {
 	router.Get("/users/me", h.GetMe)
-}
-
-func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "userID"))
-
-	if err != nil {
-		h.writeMappedError(w, ErrInvalidUserID, "invalid user ID")
-		return
-	}
-
-	foundUser, err := h.service.GetByID(r.Context(), id)
-
-	if err != nil {
-		h.writeMappedError(w, err, "failed to get user", "user_id", id.String())
-		return
-	}
-
-	response := toUserByIDResponse(foundUser)
-
-	if err := httpx.WriteJSON(w, http.StatusOK, response); err != nil {
-		h.log.Error(
-			"failed to write user response",
-			"user_id", id.String(),
-			"error", err,
-		)
-	}
+	router.Get("/users/me/settings", h.GetUserSettings)
+	router.Put("/users/me", h.UpdateUser)
 }
 
 func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.UserIDFromContext(r.Context())
+	userID, ok := h.authenticatedUserID(w, r)
 	if !ok {
-		if err := httpx.WriteError(
-			w,
-			http.StatusInternalServerError,
-			"INTERNAL_ERROR",
-			"internal server error",
-		); err != nil {
-			h.log.Error(
-				"failed to write internal error response",
-				"error", err,
-			)
-		}
-
-		h.log.Error("authenticated user ID missing from context")
 		return
 	}
 
@@ -105,17 +62,15 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetUserSettings(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "userID"))
-
-	if err != nil {
-		h.writeMappedError(w, ErrInvalidUserID, "invalid user ID")
+	userID, ok := h.authenticatedUserID(w, r)
+	if !ok {
 		return
 	}
 
-	foundSettings, err := h.service.GetUserSettings(r.Context(), id)
+	foundSettings, err := h.service.GetUserSettings(r.Context(), userID)
 
 	if err != nil {
-		h.writeMappedError(w, err, "failed to get user settings", "user_id", id.String())
+		h.writeMappedError(w, err, "failed to get user settings", "user_id", userID.String())
 		return
 	}
 
@@ -124,17 +79,15 @@ func (h *Handler) GetUserSettings(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.WriteJSON(w, http.StatusOK, response); err != nil {
 		h.log.Error(
 			"failed to write user settings response",
-			"user_id", id.String(),
+			"user_id", userID.String(),
 			"error", err,
 		)
 	}
 }
 
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "userID"))
-
-	if err != nil {
-		h.writeMappedError(w, ErrInvalidUserID, "invalid user ID")
+	userID, ok := h.authenticatedUserID(w, r)
+	if !ok {
 		return
 	}
 
@@ -143,18 +96,18 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&req); err != nil {
-		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update user request", "user_id", id.String())
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update user request", "user_id", userID.String())
 		return
 	}
 
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update user request", "user_id", id.String())
+		h.writeMappedError(w, ErrInvalidRequest, "failed to decode update user request", "user_id", userID.String())
 		return
 	}
 
-	err = h.service.UpdateUser(
+	err := h.service.UpdateUser(
 		r.Context(),
-		id,
+		userID,
 		UpdateUserParams{
 			Name:        req.Name,
 			Email:       req.Email,
@@ -162,9 +115,31 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		h.writeMappedError(w, err, "failed to update user", "user_id", id.String())
+		h.writeMappedError(w, err, "failed to update user", "user_id", userID.String())
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) authenticatedUserID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if ok {
+		return userID, true
+	}
+
+	h.log.Error("authenticated user ID missing from context")
+	if err := httpx.WriteError(
+		w,
+		http.StatusInternalServerError,
+		"INTERNAL_ERROR",
+		"internal server error",
+	); err != nil {
+		h.log.Error(
+			"failed to write internal error response",
+			"error", err,
+		)
+	}
+
+	return uuid.Nil, false
 }
