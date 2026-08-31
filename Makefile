@@ -10,15 +10,20 @@ ifeq ($(origin DATABASE_URL), undefined)
 -include $(ENV_FILE)
 endif
 
+export DATABASE_URL
+
 .PHONY: go-run run docker-up docker-down docker-down-v fmt test vet check \
 	migrate-install migrate-create migrate-validate migrate-status \
 	migrate-version migrate-up migrate-down check-database-url
 
 go-run:
-	cd backend && go run ./cmd/api
+	cd backend && set -a && . ./.env && set +a && go run ./cmd/api
+
+pg-run:
+	$(COMPOSE) up -d postgres 
 
 run:
-	$(COMPOSE) up -d postgres 
+	make pg-run
 	make go-run
 
 docker-up:

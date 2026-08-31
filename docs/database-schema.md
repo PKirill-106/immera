@@ -26,7 +26,7 @@ The exact UUID version will be decided before the first production migration.
 
 | Module      | Tables                                    |
 | ----------- | ----------------------------------------- |
-| Auth        | `users`, `auth_refresh_tokens`            |
+| Auth        | `users`, `auth_refresh_tokens`, `email_verification_tokens` |
 | Documents   | `documents`, `document_progress`          |
 | Translation | `global_words`, `translation_cache`       |
 | Dictionary  | `dictionary_entries`, `dictionary_groups` |
@@ -47,6 +47,7 @@ Proposed fields:
 | `email`         | TEXT        | unique, not null |
 | `password_hash` | TEXT        | not null         |
 | `created_at`    | TIMESTAMPTZ | not null         |
+| `email_verified_at` | TIMESTAMPTZ | nullable     |
 
 Important rules:
 
@@ -70,25 +71,48 @@ Proposed fields:
 
 | Column       | Type        | Constraints      |
 | ------------ | ----------- | ---------------- |
-| `unique_id`  | UUID        | primary key      |
+| `id`         | UUID        | primary key      |
 | `user_id`    | UUID        | FK to `users`    |
 | `token_hash` | TEXT        | unique, not null |
 | `expires_at` | TIMESTAMPTZ | not null         |
 | `created_at` | TIMESTAMPTZ | not null         |
-| `revoked_at` | TIMESTAMPTZ | nullable         |
 
 Important rules:
 
 - only a cryptographic hash of the refresh token is stored;
-- expired and revoked tokens cannot be used;
+- expired and rotated or deleted tokens cannot be used;
 - deleting a user should remove their refresh-token sessions;
 - token rotation should be supported by the application service.
+- rotation replaces the stored session atomically; a separate revocation timestamp is not currently used.
 
 Likely indexes:
 
 - unique index on `token_hash`;
 - index on `user_id`;
 - optional index on `expires_at` for cleanup jobs.
+
+## Email verification tokens
+
+### `email_verification_tokens`
+
+Stores one-time email-verification tokens. Only SHA-256 hashes are persisted.
+
+| Column       | Type        | Constraints                    |
+| ------------ | ----------- | ------------------------------ |
+| `id`         | UUID        | primary key                    |
+| `user_id`    | UUID        | FK to `users`, not null        |
+| `token_hash` | VARCHAR(64) | unique, not null               |
+| `expires_at` | TIMESTAMPTZ | not null                       |
+| `created_at` | TIMESTAMPTZ | not null                       |
+| `used_at`    | TIMESTAMPTZ | nullable                       |
+
+Important rules:
+
+- raw email-verification tokens are never stored;
+- verification tokens expire and can only be used once;
+- setting `users.email_verified_at` and marking the token used happen atomically;
+- resending replaces previous unused verification tokens for the user;
+- deleting a user removes their verification tokens.
 
 ## Documents
 

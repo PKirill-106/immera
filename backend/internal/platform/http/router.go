@@ -8,10 +8,20 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"immera/internal/auth"
 	platformmiddleware "immera/internal/platform/middleware"
 )
 
-func NewRouter(log *slog.Logger, allowedOrigins []string, registerRoutes ...func(chi.Router)) stdhttp.Handler {
+type RouteRegistrar func(chi.Router)
+
+func NewRouter(
+	log *slog.Logger,
+	allowedOrigins []string,
+	jwtSecret []byte,
+	infrastructureRoutes []RouteRegistrar,
+	apiRoutes []RouteRegistrar,
+	protectedRoutes []RouteRegistrar,
+) stdhttp.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
@@ -25,8 +35,25 @@ func NewRouter(log *slog.Logger, allowedOrigins []string, registerRoutes ...func
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
-	for _, registerRoute := range registerRoutes {
-		registerRoute(router)
+
+	for _, register := range infrastructureRoutes {
+		register(router)
 	}
+
+	router.Route("/api/v1", func(api chi.Router) {
+		for _, register := range apiRoutes {
+			register(api)
+		}
+
+		api.Group(func(protected chi.Router) {
+			protected.Use(auth.Middleware(jwtSecret, log))
+
+			for _, register := range protectedRoutes {
+				register(protected)
+			}
+		})
+
+	})
+
 	return router
 }

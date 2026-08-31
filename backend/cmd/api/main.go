@@ -10,13 +10,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"immera/internal/auth"
 	"immera/internal/health"
+	"immera/internal/platform/apidocs"
 	"immera/internal/platform/config"
 	"immera/internal/platform/database"
 	httpserver "immera/internal/platform/http"
 	"immera/internal/platform/logger"
-
-	"github.com/joho/godotenv"
+	"immera/internal/user"
 )
 
 func main() {
@@ -27,9 +28,6 @@ func main() {
 }
 
 func run() error {
-	if err := godotenv.Load(); err != nil {
-		fmt.Printf("Failed to load .env")
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
@@ -48,7 +46,44 @@ func run() error {
 	defer pool.Close()
 
 	healthHandler := health.NewHandler(pool.Ping)
-	router := httpserver.NewRouter(log, cfg.HTTP.AllowedOrigins, healthHandler.Routes)
+
+	docsHandler := apidocs.NewHandler(
+		"/openapi.yaml",
+		"../docs/openapi.yaml",
+	)
+
+	authRepository := auth.NewPostgresRepository(pool)
+	emailSender := auth.NewDevelopmentEmailSender(log)
+	authService := auth.NewService(
+		authRepository,
+		emailSender,
+		[]byte(cfg.Auth.JWTSecret),
+		cfg.Auth.AccessTokenTTL,
+		cfg.Auth.RefreshTokenTTL,
+		cfg.Auth.EmailVerificationTTL,
+	)
+	authHandler := auth.NewHandler(authService, log)
+
+	userRepository := user.NewPostgresRepository(pool)
+	userService := user.NewService(userRepository)
+	userHandler := user.NewHandler(userService, log)
+
+	router := httpserver.NewRouter(
+		log,
+		cfg.HTTP.AllowedOrigins,
+		[]byte(cfg.Auth.JWTSecret),
+		[]httpserver.RouteRegistrar{
+			healthHandler.Routes,
+			docsHandler.Routes,
+		},
+		[]httpserver.RouteRegistrar{
+			authHandler.Routes,
+		},
+		[]httpserver.RouteRegistrar{
+			userHandler.ProtectedRoutes,
+		},
+	)
+
 	server := httpserver.NewServer(cfg.HTTP, router, log)
 
 	serverErrors := make(chan error, 1)

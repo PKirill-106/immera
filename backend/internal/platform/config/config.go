@@ -12,6 +12,7 @@ type Config struct {
 	Environment string
 	HTTP        HTTP
 	Database    Database
+	Auth        AuthConfig
 }
 
 type HTTP struct {
@@ -32,6 +33,12 @@ type Database struct {
 	MaxConnIdleTime time.Duration
 	ConnectTimeout  time.Duration
 }
+type AuthConfig struct {
+	JWTSecret            string
+	AccessTokenTTL       time.Duration
+	RefreshTokenTTL      time.Duration
+	EmailVerificationTTL time.Duration
+}
 
 func Load() (Config, error) {
 	cfg := Config{
@@ -43,6 +50,16 @@ func Load() (Config, error) {
 		Database: Database{
 			URL: env("DATABASE_URL", ""),
 		},
+		Auth: AuthConfig{
+			JWTSecret: env("JWT_SECRET", ""),
+		},
+	}
+
+	if strings.TrimSpace(cfg.Auth.JWTSecret) == "" {
+		return Config{}, fmt.Errorf("JWT_SECRET is required")
+	}
+	if len(cfg.Auth.JWTSecret) < 32 {
+		return Config{}, fmt.Errorf("JWT_SECRET must be at least 32 bytes")
 	}
 
 	var err error
@@ -78,6 +95,15 @@ func Load() (Config, error) {
 	}
 	if cfg.Database.MinConnections > cfg.Database.MaxConnections {
 		return Config{}, fmt.Errorf("DB_MIN_CONNECTIONS must not exceed DB_MAX_CONNECTIONS")
+	}
+	if cfg.Auth.AccessTokenTTL, err = duration("ACCESS_TOKEN_TTL", 15*time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.Auth.RefreshTokenTTL, err = duration("REFRESH_TOKEN_TTL", 720*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.Auth.EmailVerificationTTL, err = duration("EMAIL_VERIFICATION_TTL", 24*time.Hour); err != nil {
+		return Config{}, err
 	}
 	return cfg, nil
 }

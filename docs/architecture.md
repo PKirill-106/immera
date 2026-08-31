@@ -38,16 +38,44 @@ The design may borrow ideas from Clean Architecture, but it should avoid unneces
 ## High-level repository structure
 
 ```text
-cmd/
-    api/
-
-internal/
-    auth/
-    users/
-    documents/
-    dictionary/
-    translation/
-    platform/
-
-migrations/
+backend/
+    cmd/
+        api/
+    internal/
+        auth/
+        dictionary/
+        document/
+        health/
+        platform/
+        translation/
+        user/
+    migrations/
 docs/
+    decisions/
+    openapi.yaml
+```
+
+Business code is grouped by module under `backend/internal`. Shared HTTP, database, configuration, logging, and security infrastructure belongs in `backend/internal/platform` and must not contain module-specific business rules.
+
+## Authentication and authorization
+
+Access tokens are short-lived HS256 JWTs.
+
+The backend does not persist access tokens. Protected requests are authenticated by:
+
+1. reading `Authorization: Bearer <token>`;
+2. validating the JWT signature and expiration;
+3. requiring HS256;
+4. reading the user UUID from the `sub` claim;
+5. storing the authenticated user ID in the request context.
+
+Protected handlers derive the current user exclusively from this request context. Self-service routes use `/users/me` and do not accept an arbitrary user ID from the client.
+
+Refresh tokens are opaque, cryptographically random values. Only their SHA-256 hashes are stored in PostgreSQL. Rotation transactionally removes the old refresh-token session and creates its replacement.
+
+Deleting a user relies on foreign-key cascades to remove their refresh-token sessions, email-verification tokens, and user settings.
+
+## API contract
+
+OpenAPI 3.1 specification in `docs/openapi.yaml` is the source of truth for the public HTTP API.
+Swagger UI is exposed at `/docs` for local API exploration, and the raw specification is served at `/openapi.yaml`.
