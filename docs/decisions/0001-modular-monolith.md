@@ -94,3 +94,23 @@ handlers/
 services/
 repositories/
 models/
+```
+
+This was rejected because grouping the whole application by technical layer makes business boundaries less visible and encourages unrelated modules to share implementation details.
+
+### Microservices
+
+Splitting each business area into an independently deployed service was rejected for the initial backend. The additional network, deployment, observability, and distributed-transaction complexity is not justified by the current product stage or team size.
+
+The translation component remains a valid exception because its Python runtime and future scaling characteristics differ from the Go backend.
+
+## Current implementation alignment
+
+Current implemented business modules include:
+
+- `internal/auth`
+- `internal/user`
+
+Shared technical infrastructure lives under `internal/platform`. The repository also contains initial module directories for documents, translation, and dictionary functionality. These boundaries will gain implementations as those product areas are developed.
+
+Authentication owns credentials, access tokens, refresh sessions, and email-verification flows. The user module owns profile and settings self-service behavior. User HTTP endpoints consume the authenticated identity exposed by the auth module instead of importing its PostgreSQL repository or accepting arbitrary user IDs.

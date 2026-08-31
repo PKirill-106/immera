@@ -3,9 +3,9 @@
   - **Solution:** Execute a dummy `bcrypt` comparison against a fixed hash even when the user is not found in the database to ensure constant-time response execution.
   - **Priority:** Pre-Production (Security Hardening)
 
-- [ ] Add auth middleware and bearer-token validation.
-- [ ] Add `GET /users/me` after auth middleware exists.
-- [ ] Add the OpenAPI `bearerAuth` security scheme with protected routes.
+- [x] Add auth middleware and bearer-token validation.
+- [x] Add `GET /users/me` after auth middleware exists.
+- [x] Add the OpenAPI `bearerAuth` security scheme with protected routes.
 - [ ] Add Redis-backed login and verification-resend rate limiting.
 - [ ] Add a cleanup job for expired refresh-token sessions.
 - [ ] Decide whether access-token blacklisting is needed; access tokens currently remain valid until expiry.
